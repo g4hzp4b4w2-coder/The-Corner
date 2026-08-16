@@ -1,7 +1,7 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE } from "./_lib/profileContext.js";
+import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE } from "./_lib/profileContext.js";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-5";
 const DAY_CODES = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
 const INTENSITY_LABEL = {
@@ -69,6 +69,7 @@ Rules:
 - Spread training days reasonably across the week, don't bunch them all together.
 - Bias session content toward the stated focus area, and toward the boxer's weaknesses from their profile/log when relevant.
 - ${FIGHT_IQ_NOTE.en} If it's relevant, a training day's blocks/note can include a Fight IQ-building element (not every day needs one).
+- ${EXPERTISE_NOTE.en}
 - Keep "title" short (2-4 words), "blocks" to 2-4 short bullet items, "note" to one short encouraging/practical sentence.
 - All text must be in English.`;
   }
@@ -99,6 +100,7 @@ Kurallar:
 - Antrenman günlerini haftaya makul şekilde yay, hepsini yan yana toplama.
 - Seans içeriğini belirtilen odak alanına, ve ilgiliyse profildeki/günlükteki zayıf yanlara doğru eğ.
 - ${FIGHT_IQ_NOTE.tr} İlgiliyse bir antrenman gününün blocks/note kısmına Fight IQ geliştiren bir öğe ekleyebilirsin (her günde olması şart değil).
+- ${EXPERTISE_NOTE.tr}
 - "title" kısa olsun (2-4 kelime), "blocks" 2-4 kısa madde olsun, "note" tek kısa, pratik/motive edici bir cümle olsun.
 - Tüm metinler Türkçe olmalı.`;
 }

@@ -1,7 +1,7 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE } from "./_lib/profileContext.js";
+import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE } from "./_lib/profileContext.js";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-5";
 const MAX_IMAGES = 18;
 
 const VIDEO_INSTRUCTIONS = {
@@ -31,6 +31,8 @@ function buildSystemPrompt(profile, entries, lang) {
 
 ${FIGHT_IQ_NOTE.en}
 
+${EXPERTISE_NOTE.en}
+
 IMPORTANT: Always reply in ENGLISH, no matter what language any earlier messages in this conversation were written in — the user has explicitly set English as the app language right now.
 
 Sometimes a message includes a few still frames extracted from the user's own training video. When frames are included, only comment on what you can actually see in them — stance, guard height, balance, body/shoulder angle, and similar static observations. You cannot reliably judge speed, power, timing, or full motion flow from a handful of still frames — never invent precise numbers or percentages about that, and say plainly when something isn't visible or you're unsure.
@@ -44,6 +46,8 @@ ${entriesLines || "(no entries yet)"}`;
   return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Boksörle doğrudan sohbet ediyorsun. Sıcak, spesifik ve pratik ol — gerçek bir köşe koçu gibi. Cevapların kısa olsun (2-5 cümle), gerektiğinde profiline ve antrenman günlüğüne referans ver, önerilerin şu ana kadarki tüm sohbete göre evrilsin, sadece son mesaja değil. Bir noktayı güçlendirecekse gerçek, bilinen boksörlerin belgelenmiş antrenman yöntemlerine, tekniklerine ve stillerine referans ver (örn. önerdiğin şeye yaklaşımı benzeyen bir boksörün adını anmak gibi) — emin olmadığın detayları uydurma, emin değilsen bunu söyle. Markdown biçimlendirmesi kullanma, sade konuşma dili kullan.
 
 ${FIGHT_IQ_NOTE.tr}
+
+${EXPERTISE_NOTE.tr}
 
 ÖNEMLİ: Sohbetteki önceki mesajlar hangi dilde yazılmış olursa olsun HER ZAMAN TÜRKÇE cevap ver — kullanıcı şu an uygulama dilini Türkçe olarak ayarlamış durumda.
 
