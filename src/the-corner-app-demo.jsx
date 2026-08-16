@@ -57,7 +57,6 @@ const translations = {
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
   streakStripLabel: { tr: "Bu haftaki seriyin", en: "Your streak this week" },
-  longestStreakLabel: { tr: "En uzun serin: 21 gün", en: "Longest streak: 21 days" },
 
   // New entry form
   newSessionTitle: { tr: "Yeni seans", en: "New session" },
@@ -173,6 +172,46 @@ function computeInitials(name) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const letters = parts.slice(0, 2).map((p) => p[0].toUpperCase());
   return letters.join("") || "?";
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function startOfWeek(ts) {
+  const d = new Date(startOfDay(ts));
+  const day = d.getDay(); // 0 = Sunday
+  const diff = day === 0 ? -6 : 1 - day; // days back to Monday
+  d.setDate(d.getDate() + diff);
+  return d.getTime();
+}
+
+function computeStreaks(entries) {
+  const daySet = new Set(entries.map((e) => startOfDay(e.createdAt)));
+  const days = [...daySet].sort((a, b) => a - b);
+
+  let longest = 0;
+  let run = 0;
+  let prev = null;
+  for (const d of days) {
+    run = prev !== null && d - prev === DAY_MS ? run + 1 : 1;
+    longest = Math.max(longest, run);
+    prev = d;
+  }
+
+  const today = startOfDay(Date.now());
+  let cursor = daySet.has(today) ? today : today - DAY_MS;
+  let current = 0;
+  while (daySet.has(cursor)) {
+    current += 1;
+    cursor -= DAY_MS;
+  }
+
+  return { current, longest };
 }
 
 const categoryTranslations = {
@@ -508,23 +547,28 @@ function CoachTip({ userId, entries, profileInfo, lang }) {
   );
 }
 
-function StreakStrip({ entries, lang }) {
-  const activeDays = Math.min(entries.length, 7);
+function StreakStrip({ entries, longestStreak, lang }) {
+  const daySet = new Set(entries.map((e) => startOfDay(e.createdAt)));
+  const monday = startOfWeek(Date.now());
+  const activeFlags = Array.from({ length: 7 }, (_, i) => daySet.has(monday + i * DAY_MS));
+
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 mb-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-neutral-500 text-xs">{t(lang, "streakStripLabel")}</span>
-        <span className="text-neutral-600 text-[11px]">{t(lang, "longestStreakLabel")}</span>
+        <span className="text-neutral-600 text-[11px]">
+          {lang === "en" ? `Longest streak: ${longestStreak} days` : `En uzun serin: ${longestStreak} gün`}
+        </span>
       </div>
       <div className="flex items-center justify-between">
         {wd(lang).map((d, i) => (
           <div key={d} className="flex flex-col items-center gap-1">
             <div
               className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                i < activeDays ? "bg-red-600" : "bg-neutral-800"
+                activeFlags[i] ? "bg-red-600" : "bg-neutral-800"
               }`}
             >
-              {i < activeDays && <Flame size={12} className="text-neutral-950" />}
+              {activeFlags[i] && <Flame size={12} className="text-neutral-950" />}
             </div>
             <span className="text-[9px] text-neutral-600">{d}</span>
           </div>
@@ -535,8 +579,8 @@ function StreakStrip({ entries, lang }) {
 }
 
 function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
-  const streak = entries.length > 0 ? entries.length + 6 : 0;
-  const weekCount = entries.length;
+  const { current: streak, longest: longestStreak } = computeStreaks(entries);
+  const weekCount = entries.filter((e) => e.createdAt >= startOfWeek(Date.now())).length;
 
   return (
     <div className="px-5 pb-5">
@@ -547,7 +591,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
         <StatCard label={t(lang, "weekLabel")} value={`${weekCount} seans`} />
       </div>
 
-      <StreakStrip entries={entries} lang={lang} />
+      <StreakStrip entries={entries} longestStreak={longestStreak} lang={lang} />
 
       <WeeklySummary entries={entries} lang={lang} />
       <CoachTip userId={userId} entries={entries} profileInfo={profileInfo} lang={lang} />
@@ -988,7 +1032,7 @@ const badgeList = [
     id: "streak",
     label: "9 gün seri",
     icon: Flame,
-    check: (entries) => entries.length >= 3,
+    check: (entries) => computeStreaks(entries).longest >= 9,
   },
   {
     id: "sparring",

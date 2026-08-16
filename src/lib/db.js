@@ -47,6 +47,7 @@ function rowToEntry(row) {
     tags: row.tags || [],
     hasVideo: row.has_video,
     planKey: row.plan_key,
+    createdAt: new Date(row.created_at).getTime(),
   };
 }
 
