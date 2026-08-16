@@ -24,7 +24,7 @@ import { getMatchNews } from "./lib/matchNews";
 import AuthScreen from "./AuthScreen";
 import CoachChat from "./CoachChat";
 
-const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Agresiflik", "Footwork"];
+const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
 
 const translations = {
   navJournal: { tr: "Günlük", en: "Journal" },
@@ -175,10 +175,10 @@ function computeInitials(name) {
 
 const categoryTranslations = {
   Güç: { tr: "Güç", en: "Power" },
-  Defans: { tr: "Defans", en: "Defense" },
+  Defans: { tr: "Defans (ayak işi dahil)", en: "Defense (incl. footwork)" },
   Teknik: { tr: "Teknik", en: "Technique" },
-  Agresiflik: { tr: "Agresiflik", en: "Aggression" },
-  Footwork: { tr: "Footwork", en: "Footwork" },
+  "Fight IQ": { tr: "Fight IQ", en: "Fight IQ" },
+  Hız: { tr: "Hız", en: "Speed" },
   "Ayak işi": { tr: "Ayak işi", en: "Footwork" },
 };
 function tc(cat, lang) {
@@ -1722,7 +1722,7 @@ function OnboardingForm({ onComplete, lang }) {
   const [school, setSchool] = useState("");
   const [strengths, setStrengths] = useState([]);
   const [weaknesses, setWeaknesses] = useState([]);
-  const [ratings, setRatings] = useState({ Güç: 50, Defans: 50, Teknik: 50, Agresiflik: 50, Footwork: 50 });
+  const [ratings, setRatings] = useState({ Güç: 50, Defans: 50, Teknik: 50, "Fight IQ": 50, Hız: 50 });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
