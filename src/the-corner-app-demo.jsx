@@ -66,6 +66,8 @@ const translations = {
   noteLabel: { tr: "Not", en: "Note" },
   notePlaceholder: { tr: "Bu seansta neye çalıştın?", en: "What did you work on this session?" },
   saveLabel: { tr: "Kaydet", en: "Save" },
+  cancelLabel: { tr: "İptal", en: "Cancel" },
+  editProfileLabel: { tr: "Profili düzenle", en: "Edit profile" },
   fillDurationNoteError: { tr: "Süre ve not alanlarını doldur", en: "Fill in the duration and note fields" },
   markedFromCalendar: { tr: "Takvimden işaretlendi", en: "Marked from calendar" },
   newBadge: { tr: "yeni", en: "new" },
@@ -1038,14 +1040,34 @@ function SkillBar({ skill, value }) {
   );
 }
 
-function ProfileTab({ entries, profileInfo, onReset, onSignOut, loadError, lang }) {
+function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, loadError, lang }) {
+  const [editing, setEditing] = useState(false);
   const skillData = CATEGORY_LIST.map((skill) => ({ skill, value: profileInfo.ratings[skill] ?? 50 }));
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
   const initials = computeInitials(profileInfo.displayName);
 
+  if (editing) {
+    return (
+      <OnboardingForm
+        lang={lang}
+        initialData={profileInfo}
+        onCancel={() => setEditing(false)}
+        onComplete={async (data) => {
+          await onSaveProfile(data);
+          setEditing(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="px-5 pb-5">
-      <p className="text-neutral-100 text-base font-medium mb-3">{t(lang, "profileTitle")}</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-neutral-100 text-base font-medium">{t(lang, "profileTitle")}</p>
+        <button onClick={() => setEditing(true)} className="text-red-500 text-xs">
+          {t(lang, "editProfileLabel")}
+        </button>
+      </div>
 
       <div className="flex items-center gap-3 mb-4">
         <div className="w-12 h-12 rounded-full bg-red-950 border border-red-900 flex items-center justify-center text-red-500 text-sm font-medium">
@@ -1715,14 +1737,14 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
   );
 }
 
-function OnboardingForm({ onComplete, lang }) {
-  const [displayName, setDisplayName] = useState("");
-  const [years, setYears] = useState("");
-  const [style, setStyle] = useState("");
-  const [school, setSchool] = useState("");
-  const [strengths, setStrengths] = useState([]);
-  const [weaknesses, setWeaknesses] = useState([]);
-  const [ratings, setRatings] = useState({ Güç: 50, Defans: 50, Teknik: 50, "Fight IQ": 50, Hız: 50 });
+function OnboardingForm({ onComplete, lang, initialData, onCancel }) {
+  const [displayName, setDisplayName] = useState(initialData?.displayName || "");
+  const [years, setYears] = useState(initialData?.years || "");
+  const [style, setStyle] = useState(initialData?.style || "");
+  const [school, setSchool] = useState(initialData?.school || "");
+  const [strengths, setStrengths] = useState(initialData?.strengths || []);
+  const [weaknesses, setWeaknesses] = useState(initialData?.weaknesses || []);
+  const [ratings, setRatings] = useState(initialData?.ratings || { Güç: 50, Defans: 50, Teknik: 50, "Fight IQ": 50, Hız: 50 });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1859,13 +1881,23 @@ function OnboardingForm({ onComplete, lang }) {
 
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
 
-      <button
-        onClick={submit}
-        disabled={saving}
-        className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
-      >
-        {saving ? t(lang, "loadingLabel") : t(lang, "startLabel")}
-      </button>
+      <div className="flex gap-2">
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium text-sm rounded-lg py-2.5 transition-colors"
+          >
+            {t(lang, "cancelLabel")}
+          </button>
+        )}
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
+        >
+          {saving ? t(lang, "loadingLabel") : initialData ? t(lang, "saveLabel") : t(lang, "startLabel")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2106,7 +2138,15 @@ export default function TheCornerApp() {
               lang={lang}
             />
           ) : (
-            <ProfileTab entries={entries} profileInfo={profileInfo} onReset={resetData} onSignOut={signOut} loadError={loadError} lang={lang} />
+            <ProfileTab
+              entries={entries}
+              profileInfo={profileInfo}
+              onReset={resetData}
+              onSignOut={signOut}
+              onSaveProfile={completeOnboarding}
+              loadError={loadError}
+              lang={lang}
+            />
           )}
         </div>
 
