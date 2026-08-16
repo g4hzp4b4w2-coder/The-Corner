@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -12,6 +12,9 @@ import {
   resetJournalEntries,
   getCommunityPosts,
   addCommunityPost,
+  deleteCommunityPost,
+  getPostComments,
+  addPostComment,
   toggleLike as toggleLikeDb,
   getChatMessages,
   resetChatMessages,
@@ -77,7 +80,12 @@ const translations = {
   daysQuestion: { tr: "Haftada kaç gün antrenman yapabilirsin?", en: "How many days a week can you train?" },
   levelQuestion: { tr: "Seviyen ne?", en: "What's your level?" },
   focusQuestion: { tr: "En çok neyi geliştirmek istiyorsun?", en: "What do you most want to improve?" },
-  answerAllThree: { tr: "Üç soruyu da cevapla", en: "Answer all three questions" },
+  answerAllThree: { tr: "Tüm soruları cevapla ve en az bir antrenman saati ekle", en: "Answer all the questions and add at least one training time" },
+  timeSlotsQuestion: { tr: "Hangi saatlerde, ne yoğunlukta antrenman yapabilirsin?", en: "What times can you train, and at what intensity?" },
+  durationHintPlaceholder: { tr: "örn. 90 dk ya da 1.5 saat", en: "e.g. 90 min or 1.5 hours" },
+  addTimeSlotLabel: { tr: "Saat ekle", en: "Add time" },
+  noSlotsYet: { tr: "Henüz saat eklemedin", en: "No times added yet" },
+  fillTimeDurationError: { tr: "Saat ve süre gir", en: "Enter a time and duration" },
   addToPlanLabel: { tr: "Plana ekle", en: "Add to plan" },
   sessionNamePlaceholder: { tr: "Antrenman adı, ör. Pad çalışması", en: "Session name, e.g. Pad work" },
   addLabel: { tr: "Ekle", en: "Add" },
@@ -770,8 +778,97 @@ function MatchNewsList({ lang }) {
   );
 }
 
-function CommunityTab({ posts, onLike, onPost, lang }) {
+function CommentThread({ postId, currentUserId, displayName, onCountChange, lang }) {
+  const [comments, setComments] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    getPostComments(postId)
+      .then((res) => {
+        if (!cancelled) {
+          setComments(res);
+          onCountChange(res.length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError(lang === "en" ? "Couldn't load comments." : "Yorumlar yüklenemedi.");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId]);
+
+  const submit = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      const name = displayName || "—";
+      const initials = computeInitials(name);
+      const saved = await addPostComment(postId, currentUserId, { name, initials, text });
+      setComments((prev) => {
+        const next = [...(prev || []), saved];
+        onCountChange(next.length);
+        return next;
+      });
+      setDraft("");
+    } catch (e) {
+      setError(lang === "en" ? "Couldn't send comment, try again." : "Yorum gönderilemedi, tekrar dene.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-neutral-800 flex flex-col gap-2">
+      {comments === null ? (
+        <p className="text-neutral-600 text-[11px] animate-pulse">···</p>
+      ) : comments.length === 0 ? (
+        <p className="text-neutral-700 text-[11px]">{lang === "en" ? "No comments yet." : "Henüz yorum yok."}</p>
+      ) : (
+        comments.map((c) => (
+          <div key={c.id} className="flex items-start gap-2">
+            <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 text-[9px] font-medium shrink-0 mt-0.5">
+              {c.initials}
+            </div>
+            <div>
+              <span className="text-neutral-300 text-[11px] font-medium">{c.name}</span>{" "}
+              <span className="text-neutral-400 text-[11px]">{c.text}</span>
+            </div>
+          </div>
+        ))
+      )}
+      {error && <p className="text-red-400 text-[11px]">{error}</p>}
+      <div className="flex items-center gap-1.5">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder={lang === "en" ? "Write a comment..." : "Bir yorum yaz..."}
+          className="flex-1 bg-neutral-950 border border-neutral-800 text-neutral-200 text-xs rounded-lg px-2.5 py-1.5"
+        />
+        <button
+          onClick={submit}
+          disabled={sending || !draft.trim()}
+          className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-neutral-950 rounded-lg p-1.5 transition-colors shrink-0"
+          aria-label="Send comment"
+        >
+          <Send size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, displayName, lang }) {
   const [view, setView] = useState("feed");
+  const [expandedId, setExpandedId] = useState(null);
+  const [liveCounts, setLiveCounts] = useState({});
 
   return (
     <div className="px-5 pb-5">
@@ -828,6 +925,15 @@ function CommunityTab({ posts, onLike, onPost, lang }) {
                         </span>
                       )}
                       <span className="text-neutral-600 text-xs">{timeAgo(p.timestamp, lang)}</span>
+                      {p.userId === currentUserId && (
+                        <button
+                          onClick={() => onDeletePost(p.id)}
+                          aria-label="Delete post"
+                          className="ml-auto text-neutral-600 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
 
                     {p.text && <p className="text-neutral-300 text-sm leading-relaxed mb-2">{p.text}</p>}
@@ -847,11 +953,24 @@ function CommunityTab({ posts, onLike, onPost, lang }) {
                         <Heart size={14} className={p.liked ? "text-red-500" : ""} fill={p.liked ? "currentColor" : "none"} />
                         {p.likes}
                       </button>
-                      <span className="flex items-center gap-1">
+                      <button
+                        onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                        className="flex items-center gap-1 hover:text-neutral-300 transition-colors"
+                      >
                         <MessageCircle size={14} />
-                        {p.comments}
-                      </span>
+                        {liveCounts[p.id] ?? p.comments}
+                      </button>
                     </div>
+
+                    {expandedId === p.id && (
+                      <CommentThread
+                        postId={p.id}
+                        currentUserId={currentUserId}
+                        displayName={displayName}
+                        onCountChange={(n) => setLiveCounts((prev) => ({ ...prev, [p.id]: n }))}
+                        lang={lang}
+                      />
+                    )}
                   </div>
                 ))}
             </div>
@@ -1259,6 +1378,15 @@ function tl(level, lang) {
   return levelTranslations[level] ? levelTranslations[level][lang] || level : level;
 }
 
+const intensityTranslations = {
+  Hafif: { tr: "Hafif", en: "Light" },
+  Orta: { tr: "Orta", en: "Medium" },
+  Yoğun: { tr: "Yoğun", en: "Intense" },
+};
+function ti(intensity, lang) {
+  return intensityTranslations[intensity] ? intensityTranslations[intensity][lang] || intensity : intensity;
+}
+
 function ChipGroup({ label, options, value, onChange, renderLabel }) {
   return (
     <div className="mb-3">
@@ -1280,7 +1408,81 @@ function ChipGroup({ label, options, value, onChange, renderLabel }) {
   );
 }
 
-function PlanQuestionnaire({ intensity, setIntensity, days, setDays, level, setLevel, focus, setFocus, onSubmit, error, lang }) {
+function TimeSlotPicker({ slots, onAdd, onRemove, lang }) {
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState("");
+  const [slotIntensity, setSlotIntensity] = useState("Orta");
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    if (!time || !duration.trim()) {
+      setError(t(lang, "fillTimeDurationError"));
+      return;
+    }
+    onAdd({ time, duration: duration.trim(), intensity: slotIntensity });
+    setDuration("");
+    setError("");
+  };
+
+  return (
+    <div className="mb-3">
+      <p className="text-neutral-500 text-xs mb-1.5">{t(lang, "timeSlotsQuestion")}</p>
+
+      {slots.length > 0 && (
+        <div className="flex flex-col gap-1.5 mb-2">
+          {slots.map((s, i) => (
+            <div key={i} className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 flex items-center justify-between">
+              <span className="text-neutral-300 text-xs">
+                {s.time} · {s.duration} · {ti(s.intensity, lang)}
+              </span>
+              <button onClick={() => onRemove(i)} aria-label="Remove">
+                <X size={14} className="text-neutral-600" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-2">
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="w-24 bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-2 py-2"
+        />
+        <input
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+          placeholder={t(lang, "durationHintPlaceholder")}
+          className="flex-1 bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+        />
+      </div>
+      <div className="flex gap-1.5 flex-wrap mb-2">
+        {["Hafif", "Orta", "Yoğun"].map((opt) => (
+          <button
+            key={opt}
+            onClick={() => setSlotIntensity(opt)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+              slotIntensity === opt ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-900 border-neutral-800 text-neutral-500"
+            }`}
+          >
+            {ti(opt, lang)}
+          </button>
+        ))}
+      </div>
+      {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
+      <button
+        onClick={submit}
+        className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded-lg py-2 transition-colors"
+      >
+        {t(lang, "addTimeSlotLabel")}
+      </button>
+      {slots.length === 0 && <p className="text-neutral-700 text-[11px] mt-1.5">{t(lang, "noSlotsYet")}</p>}
+    </div>
+  );
+}
+
+function PlanQuestionnaire({ intensity, setIntensity, days, setDays, level, setLevel, focus, setFocus, timeSlots, onAddSlot, onRemoveSlot, onSubmit, error, lang }) {
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
       <p className="text-neutral-200 text-xs font-medium mb-3">{t(lang, "questionnaireTitle")}</p>
@@ -1305,6 +1507,7 @@ function PlanQuestionnaire({ intensity, setIntensity, days, setDays, level, setL
         onChange={setFocus}
         renderLabel={(opt) => tc(opt, lang)}
       />
+      <TimeSlotPicker slots={timeSlots} onAdd={onAddSlot} onRemove={onRemoveSlot} lang={lang} />
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
       <button
         onClick={onSubmit}
@@ -1329,11 +1532,15 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
   const [aiPlan, setAiPlan] = useState(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState(false);
+  const [timeSlots, setTimeSlots] = useState([]);
 
   const plan = aiPlan || [];
 
+  const addTimeSlot = (slot) => setTimeSlots((prev) => [...prev, slot]);
+  const removeTimeSlot = (i) => setTimeSlots((prev) => prev.filter((_, idx) => idx !== i));
+
   const startPlan = async () => {
-    if (!days || !level || !focus) {
+    if (!days || !level || !focus || timeSlots.length === 0) {
       setQError(t(lang, "answerAllThree"));
       return;
     }
@@ -1351,7 +1558,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
     }
 
     try {
-      const res = await getWeeklyPlan({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), intensity, days, level, focus, lang });
+      const res = await getWeeklyPlan({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), intensity, days, level, focus, timeSlots, lang });
       setAiPlan(res.plan);
     } catch (e) {
       setAiPlan(buildPlan(intensity, days, focus, lang));
@@ -1425,6 +1632,9 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
             setLevel={setLevel}
             focus={focus}
             setFocus={setFocus}
+            timeSlots={timeSlots}
+            onAddSlot={addTimeSlot}
+            onRemoveSlot={removeTimeSlot}
             onSubmit={startPlan}
             error={qError}
             lang={lang}
@@ -1750,6 +1960,16 @@ export default function TheCornerApp() {
     setPosts(refreshed);
   };
 
+  const deletePost = async (id) => {
+    const prevPosts = posts;
+    setPosts((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await deleteCommunityPost(id, session.user.id);
+    } catch (e) {
+      setPosts(prevPosts);
+    }
+  };
+
   const addPlanEntry = async (p) => {
     const planKey = `${p.day}-${p.title}`;
     if (entries.some((e) => e.planKey === planKey)) return;
@@ -1876,7 +2096,15 @@ export default function TheCornerApp() {
               entries={entries}
             />
           ) : tab === "community" ? (
-            <CommunityTab posts={posts} onLike={toggleLike} onPost={addPost} lang={lang} />
+            <CommunityTab
+              posts={posts}
+              onLike={toggleLike}
+              onPost={addPost}
+              onDeletePost={deletePost}
+              currentUserId={session.user.id}
+              displayName={profileInfo.displayName}
+              lang={lang}
+            />
           ) : (
             <ProfileTab entries={entries} profileInfo={profileInfo} onReset={resetData} onSignOut={signOut} loadError={loadError} lang={lang} />
           )}

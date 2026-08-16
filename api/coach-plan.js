@@ -8,7 +8,7 @@ const INTENSITY_LABEL = {
   fight: { tr: "Maça hazırlık", en: "Fight prep" },
 };
 
-function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, lang }) {
+function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang }) {
   const profileLine = [
     profile?.years && `Deneyim: ${profile.years}`,
     profile?.style && `Stil: ${profile.style}`,
@@ -36,12 +36,17 @@ function buildSystemPrompt({ profile, entries, recentChat, intensity, days, leve
       ? `Goal: ${intensityLabel} · Days per week: ${days} · Level: ${level} · Focus: ${focus}`
       : `Hedef: ${intensityLabel} · Haftalık gün sayısı: ${days} · Seviye: ${level} · Odak: ${focus}`;
 
+  const slotsLines = (timeSlots || []).map((s) => `- ${s.time} · ${s.duration} · ${s.intensity}`).join("\n");
+
   const dayOrder = DAY_CODES.join(", ");
 
   if (lang === "en") {
     return `You are the AI coach in a boxing training app called "The Corner", generating a personalized weekly training plan. Blend the user's explicit answers below with what you know about their profile, training log, and recent coach chat — don't just template the answers, actually tailor session content to this specific boxer.
 
 The user's answers: ${answersLine}
+
+The user's available training times (time · duration · intensity they chose for that time):
+${slotsLines || "(none provided)"}
 
 Boxer profile: ${profileLine || "(not provided)"}
 
@@ -57,8 +62,9 @@ Respond ONLY with JSON, nothing else, in exactly this shape:
 Rules:
 - The "day" field must be exactly these 7 codes in this exact order, one each: ${dayOrder}.
 - Exactly ${days} of the 7 days should be real training sessions; the rest must be rest days (title "Dinlenme" or "Aktif dinlenme", time "—", duration "", blocks: []).
+- For every training day's "time" and "duration", use one of the user's declared available time slots above — reuse slots across multiple days if there are fewer slots than training days. If no slots were provided, pick reasonable times yourself.
+- Match each session's intensity/volume to the declared intensity of the time slot you assigned it (an "Intense" slot should get a demanding session like sparring or high-tempo pad work; a "Light" slot should get lower-tempo technical/footwork work), as well as to the stated level and goal (fight prep should feel more match-focused with more sparring; development should be more balanced).
 - Spread training days reasonably across the week, don't bunch them all together.
-- Match session intensity/volume to the stated level and goal (fight prep should feel more match-focused with more sparring; development should be more balanced).
 - Bias session content toward the stated focus area, and toward the boxer's weaknesses from their profile/log when relevant.
 - Keep "title" short (2-4 words), "blocks" to 2-4 short bullet items, "note" to one short encouraging/practical sentence.
 - All text must be in English.`;
@@ -67,6 +73,9 @@ Rules:
   return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun, kişiselleştirilmiş bir haftalık antrenman planı oluşturuyorsun. Aşağıdaki kullanıcı cevaplarını, profilini, antrenman günlüğünü ve son koç sohbetini harmanla — sadece cevapları şablona koyma, seansların içeriğini gerçekten bu boksöre göre uyarla.
 
 Kullanıcının cevapları: ${answersLine}
+
+Kullanıcının bildirdiği uygun antrenman saatleri (saat · süre · o saat için seçtiği yoğunluk):
+${slotsLines || "(belirtilmedi)"}
 
 Boksör profili: ${profileLine || "(belirtilmedi)"}
 
@@ -82,8 +91,9 @@ SADECE JSON ile cevap ver, başka hiçbir şey yazma, tam olarak şu formatta:
 Kurallar:
 - "day" alanı tam olarak şu 7 kod olmalı, bu sırayla, her biri bir kez: ${dayOrder}.
 - 7 günden tam olarak ${days} tanesi gerçek antrenman seansı olmalı; kalanlar dinlenme günü olmalı (title "Dinlenme" ya da "Aktif dinlenme", time "—", duration "", blocks: []).
+- Her antrenman gününün "time" ve "duration" alanı için yukarıdaki bildirilen saatlerden birini kullan — saat sayısı antrenman günü sayısından azsa saatleri günler arasında tekrar kullan. Hiç saat belirtilmemişse kendin makul saatler seç.
+- Her seansın yoğunluğunu/hacmini, o saate atanan yoğunluk etiketine göre ayarla ("Yoğun" işaretli saate sparring ya da yüksek tempo pad çalışması gibi zorlu bir seans; "Hafif" işaretli saate daha düşük tempolu teknik/ayak işi çalışması ver), ayrıca belirtilen seviyeye ve hedefe göre de ayarla (maça hazırlıkta daha fazla sparring/maç odaklı hissettirsin; gelişimde daha dengeli olsun).
 - Antrenman günlerini haftaya makul şekilde yay, hepsini yan yana toplama.
-- Seans yoğunluğunu/hacmini belirtilen seviyeye ve hedefe göre ayarla (maça hazırlıkta daha fazla sparring/maç odaklı hissettirsin; gelişimde daha dengeli olsun).
 - Seans içeriğini belirtilen odak alanına, ve ilgiliyse profildeki/günlükteki zayıf yanlara doğru eğ.
 - "title" kısa olsun (2-4 kelime), "blocks" 2-4 kısa madde olsun, "note" tek kısa, pratik/motive edici bir cümle olsun.
 - Tüm metinler Türkçe olmalı.`;
@@ -123,7 +133,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { profile, entries, recentChat, intensity, days, level, focus, lang = "tr" } = req.body || {};
+  const { profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang = "tr" } = req.body || {};
   if (!intensity || !days || !level || !focus) {
     res.status(400).json({ error: "intensity, days, level and focus are required" });
     return;
@@ -140,7 +150,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 1600,
-        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, lang }),
+        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang }),
         messages: [
           {
             role: "user",

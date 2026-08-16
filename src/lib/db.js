@@ -92,18 +92,19 @@ export async function resetJournalEntries(userId) {
 export async function getCommunityPosts(userId) {
   const { data, error } = await supabase
     .from("community_posts")
-    .select("*, post_likes(user_id)")
+    .select("*, post_likes(user_id), post_comments(id)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data.map((p) => ({
     id: p.id,
+    userId: p.user_id,
     name: p.name,
     initials: p.initials,
     timestamp: new Date(p.created_at).getTime(),
     text: p.text,
     stat: p.stat,
     likes: p.post_likes.length,
-    comments: p.comments,
+    comments: p.post_comments.length,
     liked: p.post_likes.some((l) => l.user_id === userId),
     verified: p.verified,
   }));
@@ -112,6 +113,31 @@ export async function getCommunityPosts(userId) {
 export async function addCommunityPost(userId, { name, initials, text }) {
   const { error } = await supabase.from("community_posts").insert({ user_id: userId, name, initials, text });
   if (error) throw error;
+}
+
+export async function deleteCommunityPost(postId, userId) {
+  const { error } = await supabase.from("community_posts").delete().eq("id", postId).eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function getPostComments(postId) {
+  const { data, error } = await supabase
+    .from("post_comments")
+    .select("*")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data.map((c) => ({ id: c.id, name: c.name, initials: c.initials, text: c.text, timestamp: new Date(c.created_at).getTime() }));
+}
+
+export async function addPostComment(postId, userId, { name, initials, text }) {
+  const { data, error } = await supabase
+    .from("post_comments")
+    .insert({ post_id: postId, user_id: userId, name, initials, text })
+    .select()
+    .single();
+  if (error) throw error;
+  return { id: data.id, name: data.name, initials: data.initials, text: data.text, timestamp: new Date(data.created_at).getTime() };
 }
 
 export async function toggleLike(postId, userId, currentlyLiked) {
