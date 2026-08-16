@@ -16,7 +16,7 @@ import {
   getChatMessages,
   resetChatMessages,
 } from "./lib/db";
-import { getJournalTip } from "./lib/coach";
+import { getJournalTip, getWeeklyPlan } from "./lib/coach";
 import { getMatchNews } from "./lib/matchNews";
 import AuthScreen from "./AuthScreen";
 import CoachChat from "./CoachChat";
@@ -1316,7 +1316,7 @@ function PlanQuestionnaire({ intensity, setIntensity, days, setDays, level, setL
   );
 }
 
-function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
+function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entries }) {
   const [mode, setMode] = useState("ai");
   const [intensity, setIntensity] = useState("general");
   const [days, setDays] = useState(null);
@@ -1326,10 +1326,13 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
   const [qError, setQError] = useState("");
   const [completed, setCompleted] = useState(Array(7).fill(false));
   const [ownPlan, setOwnPlan] = useState({});
+  const [aiPlan, setAiPlan] = useState(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState(false);
 
-  const plan = planReady ? buildPlan(intensity, days, focus, lang) : [];
+  const plan = aiPlan || [];
 
-  const startPlan = () => {
+  const startPlan = async () => {
     if (!days || !level || !focus) {
       setQError(t(lang, "answerAllThree"));
       return;
@@ -1337,10 +1340,31 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
     setQError("");
     setPlanReady(true);
     setCompleted(Array(7).fill(false));
+    setPlanLoading(true);
+    setPlanError(false);
+
+    let recentChat = [];
+    try {
+      recentChat = await getChatMessages(userId);
+    } catch (e) {
+      // proceed without chat context
+    }
+
+    try {
+      const res = await getWeeklyPlan({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), intensity, days, level, focus, lang });
+      setAiPlan(res.plan);
+    } catch (e) {
+      setAiPlan(buildPlan(intensity, days, focus, lang));
+      setPlanError(true);
+    } finally {
+      setPlanLoading(false);
+    }
   };
 
   const editAnswers = () => {
     setPlanReady(false);
+    setAiPlan(null);
+    setPlanError(false);
     setCompleted(Array(7).fill(false));
   };
 
@@ -1416,6 +1440,15 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
               </button>
             </div>
 
+            {planError && (
+              <p className="text-neutral-600 text-[11px] mb-2">
+                {lang === "en" ? "Showing a general plan — AI plan unavailable right now." : "Genel bir plan gösteriliyor — AI planı şu an alınamadı."}
+              </p>
+            )}
+
+            {planLoading ? (
+              <p className="text-neutral-600 text-xs text-center py-8 animate-pulse">{t(lang, "loadingLabel")}</p>
+            ) : (
             <div className="flex flex-col gap-2">
               {plan.map((p, i) => (
                 <button
@@ -1460,6 +1493,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
                 </button>
               ))}
             </div>
+            )}
           </>
         )
       ) : (
@@ -1833,7 +1867,14 @@ export default function TheCornerApp() {
           ) : tab === "coach" ? (
             <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} />
           ) : tab === "calendar" ? (
-            <CalendarTab onMarkDone={addPlanEntry} onUnmarkDone={removePlanEntry} lang={lang} />
+            <CalendarTab
+              onMarkDone={addPlanEntry}
+              onUnmarkDone={removePlanEntry}
+              lang={lang}
+              userId={session.user.id}
+              profileInfo={profileInfo}
+              entries={entries}
+            />
           ) : tab === "community" ? (
             <CommunityTab posts={posts} onLike={toggleLike} onPost={addPost} lang={lang} />
           ) : (
