@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -711,54 +711,61 @@ function ComposeBox({ onSubmit, lang }) {
 function MatchNewsList({ lang }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = (force) => {
+    setError("");
+    if (force) setRefreshing(true);
+    else setItems(null);
+    getMatchNews(lang, { force })
+      .then((res) => setItems(res.items || []))
+      .catch(() => setError(lang === "en" ? "Couldn't load news right now." : "Haberler şu an yüklenemedi."))
+      .finally(() => setRefreshing(false));
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    setItems(null);
-    setError("");
-    getMatchNews(lang)
-      .then((res) => {
-        if (!cancelled) setItems(res.items || []);
-      })
-      .catch(() => {
-        if (!cancelled) setError(lang === "en" ? "Couldn't load news right now." : "Haberler şu an yüklenemedi.");
-      });
-    return () => {
-      cancelled = true;
-    };
+    load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
-  if (error) {
-    return <p className="text-neutral-600 text-xs text-center py-6">{error}</p>;
-  }
-
-  if (items === null) {
-    return <p className="text-neutral-600 text-xs text-center py-6 animate-pulse">···</p>;
-  }
-
-  if (items.length === 0) {
-    return (
-      <p className="text-neutral-700 text-xs text-center py-6">
-        {lang === "en" ? "No upcoming events found right now." : "Şu an yaklaşan bir etkinlik bulunamadı."}
-      </p>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-2.5">
-      {items.map((m, i) => (
-        <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-          <div className="flex items-start justify-between mb-1">
-            <span className="text-neutral-100 text-sm font-medium">{m.fighters}</span>
-            <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">
-              {m.weight}
-            </span>
-          </div>
-          <p className="text-neutral-500 text-xs">
-            {m.date} · {m.venue}
-          </p>
+    <div>
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => load(true)}
+          disabled={refreshing || items === null}
+          className="flex items-center gap-1 text-neutral-500 hover:text-neutral-300 disabled:opacity-50 text-[11px] transition-colors"
+        >
+          <RefreshCw size={11} className={refreshing ? "animate-spin" : ""} />
+          {lang === "en" ? "Refresh" : "Yenile"}
+        </button>
+      </div>
+
+      {error ? (
+        <p className="text-neutral-600 text-xs text-center py-6">{error}</p>
+      ) : items === null ? (
+        <p className="text-neutral-600 text-xs text-center py-6 animate-pulse">···</p>
+      ) : items.length === 0 ? (
+        <p className="text-neutral-700 text-xs text-center py-6">
+          {lang === "en" ? "No upcoming events found right now." : "Şu an yaklaşan bir etkinlik bulunamadı."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {items.map((m, i) => (
+            <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+              <div className="flex items-start justify-between mb-1">
+                <span className="text-neutral-100 text-sm font-medium">{m.fighters}</span>
+                <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">
+                  {m.weight}
+                </span>
+              </div>
+              <p className="text-neutral-500 text-xs">
+                {m.date} · {m.venue}
+              </p>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { supabase } from "./supabaseClient";
 
-export async function getMatchNews(lang) {
+export async function getMatchNews(lang, { force = false } = {}) {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
-  const res = await fetch(`/api/match-news?lang=${lang}`, {
+  const res = await fetch(`/api/match-news?lang=${lang}${force ? "&force=1" : ""}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {

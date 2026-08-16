@@ -7,8 +7,8 @@ async function fetchFreshNews(lang) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const system =
     lang === "en"
-      ? `Search the web for 3 real, current or upcoming boxing events or tournaments (prefer Turkey-based events if you find good ones, but international ones are fine too). After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "weight": "weight class or 'All classes'", "date": "date as found", "venue": "city/venue"}]. Only include events you found real evidence for — never invent one.`
-      : `3 gerçek, güncel ya da yaklaşan boks etkinliği/turnuvası için web'de arama yap (mümkünse Türkiye'deki etkinlikleri tercih et, ama uluslararası olanlar da olabilir). Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih", "venue": "şehir/mekan"}]. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
+      ? `Search the web for 5-6 real, current or upcoming boxing events. Cover a mix: (1) major internationally broadcast fights/title cards (the kind aired on platforms like DAZN, ESPN, etc.), and (2) Turkey-based tournaments/federation events if you find good ones. Don't limit yourself to only local events — actively look for big-name upcoming cards too. After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "weight": "weight class or 'All classes'", "date": "date as found", "venue": "city/venue"}]. Only include events you found real evidence for — never invent one.`
+      : `5-6 gerçek, güncel ya da yaklaşan boks etkinliği için web'de arama yap. Karışık bir liste olsun: (1) büyük, uluslararası yayınlanan maçlar/başlık maçları (DAZN, ESPN gibi platformlarda yayınlanan türden), ve (2) bulabilirsen Türkiye'deki turnuva/federasyon etkinlikleri. Sadece yerel etkinliklerle sınırlı kalma — yaklaşan büyük isimli maçları da aktif olarak ara. Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih", "venue": "şehir/mekan"}]. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -62,7 +62,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const lang = (req.method === "GET" ? req.query?.lang : req.body?.lang) || "tr";
+  const params = req.method === "GET" ? req.query : req.body;
+  const lang = params?.lang || "tr";
+  const force = params?.force === "1" || params?.force === true;
 
   try {
     const cacheRes = await fetch(`${supabaseUrl}/rest/v1/match_news_cache?lang=eq.${lang}&select=items,updated_at`, {
@@ -70,7 +72,7 @@ export default async function handler(req, res) {
     });
     const cacheRows = await cacheRes.json();
     const cached = Array.isArray(cacheRows) ? cacheRows[0] : null;
-    const isStale = !cached || Date.now() - new Date(cached.updated_at).getTime() > CACHE_MAX_AGE_MS;
+    const isStale = force || !cached || Date.now() - new Date(cached.updated_at).getTime() > CACHE_MAX_AGE_MS;
 
     if (!isStale) {
       res.status(200).json({ items: cached.items, refreshed: false });
