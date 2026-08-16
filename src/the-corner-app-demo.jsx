@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, Shield, X, Award, Newspaper, Lock, Sparkles, Upload, CircleCheck, CalendarRange, Swords, Target, Circle, BadgeCheck, Languages } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import { storage } from "./lib/storage";
+import { getJournalTip, getQuickCheckin } from "./lib/coach";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Agresiflik", "Footwork"];
 
@@ -522,23 +523,33 @@ function getFighterProfile(style, school) {
   return { reference: null, focus: null, quote: null, drill: base.drill, matched: false };
 }
 
-const weaknessDrills = {
-  "sol el düşük": "Sol el pozisyon tekrarları · 3x2 dk, ayna karşısında",
-  "denge ↑": "Tek bacak denge + pivot çalışması · 3 set",
-};
-
-function getWeaknessDrill(entries) {
-  for (const e of entries) {
-    for (const t of e.tags) {
-      if (t.tone === "warn" && weaknessDrills[t.text]) return weaknessDrills[t.text];
-    }
-  }
-  return null;
-}
-
 function CoachTip({ entries, profileInfo, lang }) {
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
-  const drill = getWeaknessDrill(entries) || fighter.drill;
+  const [tip, setTip] = useState(null);
+  const [tipError, setTipError] = useState(false);
+  const [tipLoading, setTipLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTipLoading(true);
+    setTipError(false);
+    getJournalTip({ profile: profileInfo, entries, lang })
+      .then((res) => {
+        if (!cancelled) setTip(res);
+      })
+      .catch(() => {
+        if (!cancelled) setTipError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setTipLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length, profileInfo.style, profileInfo.school, lang]);
+
+  const drill = tip?.drill || fighter.drill;
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
@@ -548,7 +559,19 @@ function CoachTip({ entries, profileInfo, lang }) {
       </div>
       <div className="mb-2">
         <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "nextSessionLabel")}</p>
-        <p className="text-neutral-200 text-xs leading-relaxed">{drill}</p>
+        {tipLoading ? (
+          <p className="text-neutral-600 text-xs leading-relaxed animate-pulse">{t(lang, "loadingLabel")}</p>
+        ) : (
+          <>
+            {tip?.note && <p className="text-neutral-300 text-xs leading-relaxed mb-1">{tip.note}</p>}
+            <p className="text-neutral-200 text-xs leading-relaxed">{drill}</p>
+            {tipError && (
+              <p className="text-neutral-600 text-[10px] mt-1">
+                {lang === "en" ? "Showing a general tip — AI suggestion unavailable right now." : "Genel bir öneri gösteriliyor — AI önerisi şu an alınamadı."}
+              </p>
+            )}
+          </>
+        )}
       </div>
       {fighter.reference && (
         <div>
@@ -1024,21 +1047,6 @@ function ProfileTab({ entries, profileInfo, onReset, storageError, lang }) {
   );
 }
 
-const focusFeedback = {
-  "Sol el / guard": {
-    result: "Sol elini çene hizasında tutmaya odaklan, özellikle jab attıktan hemen sonra.",
-    drill: "Guard-hold shadowbox · 3x2 dk, sol el sürekli çenede",
-  },
-  "Ayak işi": {
-    result: "Adımların uzun kalıyor olabilir, kısa ve sık adımlar dengeyi artırır.",
-    drill: "Kutu içinde ayak işi tekrarı · 4x1.5 dk",
-  },
-  "Kroşe / vuruş gücü": {
-    result: "Vuruş anında bel dönüşünü tam kullanmıyor olabilirsin, gücün büyük kısmı buradan gelir.",
-    drill: "Yavaş tempo kroşe + rotasyon çalışması · 3x2 dk",
-  },
-};
-
 function VideoAnalysis({ lang }) {
   const [status, setStatus] = useState("idle");
 
@@ -1090,14 +1098,24 @@ function NoVideoCheckin({ lang }) {
   const [focus, setFocus] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (!focus) {
       setError(t(lang, "chooseAnAreaError"));
       return;
     }
-    setResult(focusFeedback[focus]);
     setError("");
+    setResult(null);
+    setLoading(true);
+    try {
+      const res = await getQuickCheckin({ focus, lang });
+      setResult(res);
+    } catch (e) {
+      setError(lang === "en" ? "Couldn't reach the AI coach, try again." : "AI koça ulaşılamadı, tekrar dene.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1119,9 +1137,10 @@ function NoVideoCheckin({ lang }) {
 
       <button
         onClick={submit}
-        className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-xs rounded-lg py-2 transition-colors"
+        disabled={loading}
+        className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-xs rounded-lg py-2 transition-colors"
       >
-        {t(lang, "getFeedbackLabel")}
+        {loading ? t(lang, "loadingLabel") : t(lang, "getFeedbackLabel")}
       </button>
 
       {result && (
