@@ -1,4 +1,5 @@
 import { verifyUser } from "./_lib/verifyUser.js";
+import { buildRatingsLine, FIGHT_IQ_NOTE } from "./_lib/profileContext.js";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const DAY_CODES = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
@@ -15,6 +16,7 @@ function buildSystemPrompt({ profile, entries, recentChat, intensity, days, leve
     profile?.school && `Ekol: ${profile.school}`,
     profile?.strengths?.length && `Güçlü yanlar: ${profile.strengths.join(", ")}`,
     profile?.weaknesses?.length && `Geliştirmesi gerekenler: ${profile.weaknesses.join(", ")}`,
+    buildRatingsLine(profile?.ratings, lang),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -66,6 +68,7 @@ Rules:
 - Match each session's intensity/volume to the declared intensity of the time slot you assigned it (an "Intense" slot should get a demanding session like sparring or high-tempo pad work; a "Light" slot should get lower-tempo technical/footwork work), as well as to the stated level and goal (fight prep should feel more match-focused with more sparring; development should be more balanced).
 - Spread training days reasonably across the week, don't bunch them all together.
 - Bias session content toward the stated focus area, and toward the boxer's weaknesses from their profile/log when relevant.
+- ${FIGHT_IQ_NOTE.en} If it's relevant, a training day's blocks/note can include a Fight IQ-building element (not every day needs one).
 - Keep "title" short (2-4 words), "blocks" to 2-4 short bullet items, "note" to one short encouraging/practical sentence.
 - All text must be in English.`;
   }
@@ -95,6 +98,7 @@ Kurallar:
 - Her seansın yoğunluğunu/hacmini, o saate atanan yoğunluk etiketine göre ayarla ("Yoğun" işaretli saate sparring ya da yüksek tempo pad çalışması gibi zorlu bir seans; "Hafif" işaretli saate daha düşük tempolu teknik/ayak işi çalışması ver), ayrıca belirtilen seviyeye ve hedefe göre de ayarla (maça hazırlıkta daha fazla sparring/maç odaklı hissettirsin; gelişimde daha dengeli olsun).
 - Antrenman günlerini haftaya makul şekilde yay, hepsini yan yana toplama.
 - Seans içeriğini belirtilen odak alanına, ve ilgiliyse profildeki/günlükteki zayıf yanlara doğru eğ.
+- ${FIGHT_IQ_NOTE.tr} İlgiliyse bir antrenman gününün blocks/note kısmına Fight IQ geliştiren bir öğe ekleyebilirsin (her günde olması şart değil).
 - "title" kısa olsun (2-4 kelime), "blocks" 2-4 kısa madde olsun, "note" tek kısa, pratik/motive edici bir cümle olsun.
 - Tüm metinler Türkçe olmalı.`;
 }
