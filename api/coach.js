@@ -1,5 +1,5 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE } from "./_lib/profileContext.js";
+import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 
 const MODEL = "claude-sonnet-5";
 
@@ -8,17 +8,22 @@ const SYSTEM_PROMPT = {
     FIGHT_IQ_NOTE.tr +
     ' ' +
     EXPERTISE_NOTE.tr +
+    ' ' +
+    ADDRESS_NOTE.tr +
     ' ÖNEMLİ: Ne olursa olsun, sohbet geçmişindeki mesajlar hangi dilde olursa olsun, cevabını HER ZAMAN TÜRKÇE yaz. Sadece şu JSON formatıyla cevap ver, başka hiçbir şey yazma: {"note": "2-3 cümlelik kısa öneri", "drill": "tek satırlık drill adı, süre/set bilgisiyle"}',
   en: 'You are the AI coach in a boxing training app called "The Corner". Based on the user\'s profile, recent training notes, and any recent chat history, suggest ONE focus point and a short drill for their next session. ' +
     FIGHT_IQ_NOTE.en +
     ' ' +
     EXPERTISE_NOTE.en +
+    ' ' +
+    ADDRESS_NOTE.en +
     ' IMPORTANT: No matter what language earlier messages in the chat history are in, ALWAYS write your response in ENGLISH. Respond ONLY in this JSON format, nothing else: {"note": "2-3 sentence suggestion", "drill": "one-line drill name with duration/sets"}',
 };
 
 function buildUserMessage(body, lang) {
   const { profile, entries, recentChat } = body;
   const profileLine = [
+    profile?.displayName && `İsim: ${profile.displayName}`,
     profile?.years && `Deneyim: ${profile.years}`,
     profile?.style && `Stil: ${profile.style}`,
     profile?.school && `Ekol: ${profile.school}`,

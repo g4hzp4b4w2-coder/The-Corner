@@ -1,5 +1,5 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE } from "./_lib/profileContext.js";
+import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_IMAGES = 18;
@@ -11,6 +11,7 @@ const VIDEO_INSTRUCTIONS = {
 
 function buildSystemPrompt(profile, entries, lang) {
   const profileLine = [
+    profile?.displayName && `Name: ${profile.displayName}`,
     profile?.years && `Deneyim: ${profile.years}`,
     profile?.style && `Stil: ${profile.style}`,
     profile?.school && `Ekol: ${profile.school}`,
@@ -33,6 +34,8 @@ ${FIGHT_IQ_NOTE.en}
 
 ${EXPERTISE_NOTE.en}
 
+${ADDRESS_NOTE.en}
+
 IMPORTANT: Always reply in ENGLISH, no matter what language any earlier messages in this conversation were written in — the user has explicitly set English as the app language right now.
 
 Sometimes a message includes a few still frames extracted from the user's own training video. When frames are included, only comment on what you can actually see in them — stance, guard height, balance, body/shoulder angle, and similar static observations. You cannot reliably judge speed, power, timing, or full motion flow from a handful of still frames — never invent precise numbers or percentages about that, and say plainly when something isn't visible or you're unsure.
@@ -48,6 +51,8 @@ ${entriesLines || "(no entries yet)"}`;
 ${FIGHT_IQ_NOTE.tr}
 
 ${EXPERTISE_NOTE.tr}
+
+${ADDRESS_NOTE.tr}
 
 ÖNEMLİ: Sohbetteki önceki mesajlar hangi dilde yazılmış olursa olsun HER ZAMAN TÜRKÇE cevap ver — kullanıcı şu an uygulama dilini Türkçe olarak ayarlamış durumda.
 
