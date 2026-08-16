@@ -177,7 +177,7 @@ function computeInitials(name) {
 
 const categoryTranslations = {
   Güç: { tr: "Güç", en: "Power" },
-  Defans: { tr: "Defans (ayak işi dahil)", en: "Defense (incl. footwork)" },
+  Defans: { tr: "Defans", en: "Defense" },
   Teknik: { tr: "Teknik", en: "Technique" },
   "Fight IQ": { tr: "Fight IQ", en: "Fight IQ" },
   Hız: { tr: "Hız", en: "Speed" },
