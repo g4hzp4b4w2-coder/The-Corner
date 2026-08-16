@@ -1,7 +1,12 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 
 const MODEL = "claude-haiku-4-5-20251001";
-const MAX_IMAGES = 6;
+const MAX_IMAGES = 14;
+
+const VIDEO_INSTRUCTIONS = {
+  tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var. Bu sefer kısa tutma — kareleri baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın kareler boyunca nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Yine de sadece kanıtladığın şeyleri yaz, kareler arasında net görünmeyen hız/güç gibi konularda tahmin yürütme.",
+  en: "\n\nThis message includes multiple sequential frames from the user's video. Don't keep it short this time — go through the frames and write a longer, structured analysis: (1) how stance and guard change across the frames, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. Still only state what the frames actually show — don't guess at things like speed or power that aren't visible across stills.",
+};
 
 function buildSystemPrompt(profile, entries, lang) {
   const profileLine = [
@@ -68,8 +73,10 @@ export default async function handler(req, res) {
   const priorMessages = recentMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
   const last = recentMessages[recentMessages.length - 1];
 
+  const hasImages = Array.isArray(images) && images.length > 0;
+
   let lastContent = last.content;
-  if (Array.isArray(images) && images.length > 0) {
+  if (hasImages) {
     const imageBlocks = images.slice(0, MAX_IMAGES).map((data) => ({
       type: "image",
       source: { type: "base64", media_type: "image/jpeg", data },
@@ -81,6 +88,7 @@ export default async function handler(req, res) {
   }
 
   const anthropicMessages = [...priorMessages, { role: last.role, content: lastContent }];
+  const system = buildSystemPrompt(profile, entries, lang) + (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "");
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -92,8 +100,8 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 500,
-        system: buildSystemPrompt(profile, entries, lang),
+        max_tokens: hasImages ? 1100 : 500,
+        system,
         messages: anthropicMessages,
       }),
     });

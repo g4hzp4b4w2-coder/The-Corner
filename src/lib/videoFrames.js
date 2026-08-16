@@ -15,7 +15,7 @@ function waitFor(target, event) {
   });
 }
 
-export async function extractFramesFromVideo(file, { count = 5, maxWidth = 360, quality = 0.6 } = {}) {
+export async function extractFramesFromVideo(file, { count = 12, maxWidth = 512, quality = 0.72 } = {}) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.muted = true;
