@@ -17,6 +17,7 @@ import {
   resetChatMessages,
 } from "./lib/db";
 import { getJournalTip } from "./lib/coach";
+import { getMatchNews } from "./lib/matchNews";
 import AuthScreen from "./AuthScreen";
 import CoachChat from "./CoachChat";
 
@@ -200,30 +201,6 @@ const weekDaysEn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function wd(lang) {
   return lang === "en" ? weekDaysEn : weekDaysTr;
 }
-
-const matchNews = [
-  {
-    id: 1,
-    fighters: "Türkiye Şampiyonası Yarı Final",
-    weight: "69 kg",
-    date: "23 Ağustos",
-    venue: "İstanbul",
-  },
-  {
-    id: 2,
-    fighters: "Anadolu Kupası Açık Turnuva",
-    weight: "Tüm sıklet",
-    date: "6 Eylül",
-    venue: "Ankara",
-  },
-  {
-    id: 3,
-    fighters: "Amatör Boks Gecesi",
-    weight: "75 kg",
-    date: "14 Eylül",
-    venue: "Bursa",
-  },
-];
 
 const TAG_TONE = {
   warn: "bg-amber-950 text-amber-400 border border-amber-900",
@@ -731,11 +708,46 @@ function ComposeBox({ onSubmit, lang }) {
   );
 }
 
-function MatchNewsList() {
+function MatchNewsList({ lang }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setItems(null);
+    setError("");
+    getMatchNews(lang)
+      .then((res) => {
+        if (!cancelled) setItems(res.items || []);
+      })
+      .catch(() => {
+        if (!cancelled) setError(lang === "en" ? "Couldn't load news right now." : "Haberler şu an yüklenemedi.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+
+  if (error) {
+    return <p className="text-neutral-600 text-xs text-center py-6">{error}</p>;
+  }
+
+  if (items === null) {
+    return <p className="text-neutral-600 text-xs text-center py-6 animate-pulse">···</p>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <p className="text-neutral-700 text-xs text-center py-6">
+        {lang === "en" ? "No upcoming events found right now." : "Şu an yaklaşan bir etkinlik bulunamadı."}
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2.5">
-      {matchNews.map((m) => (
-        <div key={m.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+      {items.map((m, i) => (
+        <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
           <div className="flex items-start justify-between mb-1">
             <span className="text-neutral-100 text-sm font-medium">{m.fighters}</span>
             <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">
@@ -779,7 +791,7 @@ function CommunityTab({ posts, onLike, onPost, lang }) {
       </div>
 
       {view === "news" ? (
-        <MatchNewsList />
+        <MatchNewsList lang={lang} />
       ) : (
         <>
           <ComposeBox onSubmit={onPost} lang={lang} />

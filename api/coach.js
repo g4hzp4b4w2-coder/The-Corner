@@ -3,8 +3,8 @@ import { verifyUser } from "./_lib/verifyUser.js";
 const MODEL = "claude-haiku-4-5-20251001";
 
 const SYSTEM_PROMPT = {
-  tr: 'Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Kullanıcının profiline, son antrenman notlarına ve varsa son sohbet geçmişine bakarak bir sonraki seansında çalışması gereken TEK bir odak noktası ve kısa bir drill öner. Sadece şu JSON formatıyla cevap ver, başka hiçbir şey yazma: {"note": "2-3 cümlelik kısa öneri", "drill": "tek satırlık drill adı, süre/set bilgisiyle"}',
-  en: 'You are the AI coach in a boxing training app called "The Corner". Based on the user\'s profile, recent training notes, and any recent chat history, suggest ONE focus point and a short drill for their next session. Respond ONLY in this JSON format, nothing else: {"note": "2-3 sentence suggestion", "drill": "one-line drill name with duration/sets"}',
+  tr: 'Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Kullanıcının profiline, son antrenman notlarına ve varsa son sohbet geçmişine bakarak bir sonraki seansında çalışması gereken TEK bir odak noktası ve kısa bir drill öner. ÖNEMLİ: Ne olursa olsun, sohbet geçmişindeki mesajlar hangi dilde olursa olsun, cevabını HER ZAMAN TÜRKÇE yaz. Sadece şu JSON formatıyla cevap ver, başka hiçbir şey yazma: {"note": "2-3 cümlelik kısa öneri", "drill": "tek satırlık drill adı, süre/set bilgisiyle"}',
+  en: 'You are the AI coach in a boxing training app called "The Corner". Based on the user\'s profile, recent training notes, and any recent chat history, suggest ONE focus point and a short drill for their next session. IMPORTANT: No matter what language earlier messages in the chat history are in, ALWAYS write your response in ENGLISH. Respond ONLY in this JSON format, nothing else: {"note": "2-3 sentence suggestion", "drill": "one-line drill name with duration/sets"}',
 };
 
 function buildUserMessage(body, lang) {
