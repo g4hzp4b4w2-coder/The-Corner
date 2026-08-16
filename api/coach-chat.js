@@ -1,6 +1,7 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 
 const MODEL = "claude-haiku-4-5-20251001";
+const MAX_IMAGES = 6;
 
 function buildSystemPrompt(profile, entries, lang) {
   const profileLine = [
@@ -19,14 +20,24 @@ function buildSystemPrompt(profile, entries, lang) {
     .join("\n");
 
   if (lang === "en") {
-    return `You are the AI coach in a boxing training app called "The Corner". You are chatting directly with the boxer. Be warm, specific, and practical — like a real corner coach. Keep replies short (2-5 sentences), reference their profile and training log when relevant, and let your suggestions evolve based on the whole conversation so far, not just the latest message. Draw on your real knowledge of well-known boxers and their documented training methods, techniques, and styles when it strengthens a point (e.g. naming a specific fighter whose approach matches what you're suggesting) — don't invent details you're not confident about, and say so if you're unsure rather than making something up. Do not use markdown formatting, just plain conversational text.\n\nBoxer profile: ${
-      profileLine || "(not provided)"
-    }\n\nRecent training log entries:\n${entriesLines || "(no entries yet)"}`;
+    return `You are the AI coach in a boxing training app called "The Corner". You are chatting directly with the boxer. Be warm, specific, and practical — like a real corner coach. Keep replies short (2-5 sentences), reference their profile and training log when relevant, and let your suggestions evolve based on the whole conversation so far, not just the latest message. Draw on your real knowledge of well-known boxers and their documented training methods, techniques, and styles when it strengthens a point (e.g. naming a specific fighter whose approach matches what you're suggesting) — don't invent details you're not confident about, and say so if you're unsure rather than making something up. Do not use markdown formatting, just plain conversational text.
+
+Sometimes a message includes a few still frames extracted from the user's own training video. When frames are included, only comment on what you can actually see in them — stance, guard height, balance, body/shoulder angle, and similar static observations. You cannot reliably judge speed, power, timing, or full motion flow from a handful of still frames — never invent precise numbers or percentages about that, and say plainly when something isn't visible or you're unsure.
+
+Boxer profile: ${profileLine || "(not provided)"}
+
+Recent training log entries:
+${entriesLines || "(no entries yet)"}`;
   }
 
-  return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Boksörle doğrudan sohbet ediyorsun. Sıcak, spesifik ve pratik ol — gerçek bir köşe koçu gibi. Cevapların kısa olsun (2-5 cümle), gerektiğinde profiline ve antrenman günlüğüne referans ver, önerilerin şu ana kadarki tüm sohbete göre evrilsin, sadece son mesaja değil. Bir noktayı güçlendirecekse gerçek, bilinen boksörlerin belgelenmiş antrenman yöntemlerine, tekniklerine ve stillerine referans ver (örn. önerdiğin şeye yaklaşımı benzeyen bir boksörün adını anmak gibi) — emin olmadığın detayları uydurma, emin değilsen bunu söyle. Markdown biçimlendirmesi kullanma, sade konuşma dili kullan.\n\nBoksör profili: ${
-    profileLine || "(belirtilmedi)"
-  }\n\nSon antrenman günlüğü notları:\n${entriesLines || "(henüz kayıt yok)"}`;
+  return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Boksörle doğrudan sohbet ediyorsun. Sıcak, spesifik ve pratik ol — gerçek bir köşe koçu gibi. Cevapların kısa olsun (2-5 cümle), gerektiğinde profiline ve antrenman günlüğüne referans ver, önerilerin şu ana kadarki tüm sohbete göre evrilsin, sadece son mesaja değil. Bir noktayı güçlendirecekse gerçek, bilinen boksörlerin belgelenmiş antrenman yöntemlerine, tekniklerine ve stillerine referans ver (örn. önerdiğin şeye yaklaşımı benzeyen bir boksörün adını anmak gibi) — emin olmadığın detayları uydurma, emin değilsen bunu söyle. Markdown biçimlendirmesi kullanma, sade konuşma dili kullan.
+
+Bazen bir mesaj, kullanıcının kendi antrenman videosundan alınmış birkaç sabit kare (still frame) içerir. Kareler varsa sadece gerçekten görebildiğin şeyler hakkında yorum yap — duruş, guard yüksekliği, denge, vücut/omuz açısı gibi statik gözlemler. Birkaç sabit kareden hız, güç, zamanlama ya da tam hareket akışını güvenilir şekilde değerlendiremezsin — bu konularda kesin sayı ya da yüzde uydurma, bir şey görünmüyorsa ya da emin değilsen bunu açıkça söyle.
+
+Boksör profili: ${profileLine || "(belirtilmedi)"}
+
+Son antrenman günlüğü notları:
+${entriesLines || "(henüz kayıt yok)"}`;
 }
 
 export default async function handler(req, res) {
@@ -47,11 +58,29 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { messages, profile, entries, lang = "tr" } = req.body || {};
+  const { messages, images, caption, profile, entries, lang = "tr" } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages is required" });
     return;
   }
+
+  const recentMessages = messages.slice(-30);
+  const priorMessages = recentMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+  const last = recentMessages[recentMessages.length - 1];
+
+  let lastContent = last.content;
+  if (Array.isArray(images) && images.length > 0) {
+    const imageBlocks = images.slice(0, MAX_IMAGES).map((data) => ({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data },
+    }));
+    const text =
+      (caption && caption.trim()) ||
+      (lang === "en" ? "Can you analyze my form in these video frames?" : "Bu video karelerindeki formumu analiz eder misin?");
+    lastContent = [...imageBlocks, { type: "text", text }];
+  }
+
+  const anthropicMessages = [...priorMessages, { role: last.role, content: lastContent }];
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -65,7 +94,7 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 500,
         system: buildSystemPrompt(profile, entries, lang),
-        messages: messages.slice(-30).map((m) => ({ role: m.role, content: m.content })),
+        messages: anthropicMessages,
       }),
     });
 
