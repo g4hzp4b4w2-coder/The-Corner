@@ -1,8 +1,24 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, Shield, X, Award, Newspaper, Lock, Sparkles, Upload, CircleCheck, CalendarRange, Swords, Target, Circle, BadgeCheck, Languages } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
-import { storage } from "./lib/storage";
-import { getJournalTip, getQuickCheckin } from "./lib/coach";
+import { supabase } from "./lib/supabaseClient";
+import {
+  getProfile,
+  upsertProfile,
+  deleteProfile,
+  getJournalEntries,
+  addJournalEntry,
+  deleteJournalEntryByPlanKey,
+  resetJournalEntries,
+  getCommunityPosts,
+  addCommunityPost,
+  toggleLike as toggleLikeDb,
+  getChatMessages,
+  resetChatMessages,
+} from "./lib/db";
+import { getJournalTip } from "./lib/coach";
+import AuthScreen from "./AuthScreen";
+import CoachChat from "./CoachChat";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Agresiflik", "Footwork"];
 
@@ -23,14 +39,12 @@ const translations = {
   feedLabel: { tr: "Akış", en: "Feed" },
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
   profileTitle: { tr: "Profil", en: "Profile" },
-  aiCoachTitle: { tr: "AI koç", en: "AI coach" },
-  videoAnalysisLabel: { tr: "Video analizi", en: "Video analysis" },
-  withoutVideoLabel: { tr: "Video olmadan", en: "Without video" },
   planGenerate: { tr: "Plan oluştur", en: "Generate plan" },
   editAnswersLabel: { tr: "Cevapları değiştir", en: "Edit answers" },
   shareLabel: { tr: "Paylaş", en: "Share" },
   startLabel: { tr: "Başla", en: "Start" },
   resetLabel: { tr: "Verileri sıfırla", en: "Reset data" },
+  signOutLabel: { tr: "Çıkış yap", en: "Sign out" },
   verifiedCoachLabel: { tr: "Doğrulanmış Koç", en: "Verified Coach" },
 
   // Weekly summary / coach tip / streak
@@ -40,7 +54,6 @@ const translations = {
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
   streakStripLabel: { tr: "Bu haftaki seriyin", en: "Your streak this week" },
   longestStreakLabel: { tr: "En uzun serin: 21 gün", en: "Longest streak: 21 days" },
-  historyNote: { tr: "Geçmiş seans notların için Günlük sekmesine bak.", en: "Check the Journal tab for your past session notes." },
 
   // New entry form
   newSessionTitle: { tr: "Yeni seans", en: "New session" },
@@ -48,13 +61,8 @@ const translations = {
   durationLabel: { tr: "Süre (dk)", en: "Duration (min)" },
   noteLabel: { tr: "Not", en: "Note" },
   notePlaceholder: { tr: "Bu seansta neye çalıştın?", en: "What did you work on this session?" },
-  durationNotePlaceholder: { tr: "30", en: "30" },
   saveLabel: { tr: "Kaydet", en: "Save" },
   fillDurationNoteError: { tr: "Süre ve not alanlarını doldur", en: "Fill in the duration and note fields" },
-  shadowboxOpt: { tr: "Shadowbox", en: "Shadowbox" },
-  padworkOpt: { tr: "Pad çalışması", en: "Pad work" },
-  technicalOpt: { tr: "Teknik antrenman", en: "Technical training" },
-  sparringOpt: { tr: "Sparring", en: "Sparring" },
   markedFromCalendar: { tr: "Takvimden işaretlendi", en: "Marked from calendar" },
   newBadge: { tr: "yeni", en: "new" },
 
@@ -67,16 +75,8 @@ const translations = {
   goalFightPrep: { tr: "Maça hazırlık", en: "Fight prep" },
   daysQuestion: { tr: "Haftada kaç gün antrenman yapabilirsin?", en: "How many days a week can you train?" },
   levelQuestion: { tr: "Seviyen ne?", en: "What's your level?" },
-  levelBeginner: { tr: "Başlangıç", en: "Beginner" },
-  levelIntermediate: { tr: "Orta", en: "Intermediate" },
-  levelAdvanced: { tr: "İleri", en: "Advanced" },
   focusQuestion: { tr: "En çok neyi geliştirmek istiyorsun?", en: "What do you most want to improve?" },
-  focusPower: { tr: "Güç", en: "Power" },
-  focusDefense: { tr: "Defans", en: "Defense" },
-  focusTechnique: { tr: "Teknik", en: "Technique" },
-  focusFootwork: { tr: "Ayak işi", en: "Footwork" },
   answerAllThree: { tr: "Üç soruyu da cevapla", en: "Answer all three questions" },
-  daysLevelFocusLine: { tr: "gün · {level} · odak: {focus}", en: "days · {level} · focus: {focus}" },
   addToPlanLabel: { tr: "Plana ekle", en: "Add to plan" },
   sessionNamePlaceholder: { tr: "Antrenman adı, ör. Pad çalışması", en: "Session name, e.g. Pad work" },
   addLabel: { tr: "Ekle", en: "Add" },
@@ -84,21 +84,6 @@ const translations = {
   fillTimeSessionError: { tr: "Saat ve antrenman adını gir", en: "Fill in the time and session name" },
   restDayNote: { tr: "Seçtiğin gün sayısına göre bu gün dinlenmeye ayrıldı.", en: "This day was set to rest based on the number of days you chose." },
   weeklyFocusSuffix: { tr: "Bu haftaki odağın:", en: "This week's focus:" },
-
-  // AI Coach tab
-  aiCoachSubtitle: { tr: "Video yükleyerek analiz al, ya da video olmadan hızlı geri bildirim iste.", en: "Upload a video for analysis, or get quick feedback without one." },
-  uploadShadowboxLabel: { tr: "Shadowbox videonu yükle", en: "Upload your shadowbox video" },
-  analysisCompleteLabel: { tr: "analiz tamamlandı", en: "analysis complete" },
-  uploadNewVideoLabel: { tr: "Yeni video yükle", en: "Upload new video" },
-  noVideoIntro: { tr: "Video yükleyemiyor musun? Kısa bir öz değerlendirmeyle de öneri alabilirsin.", en: "Can't upload a video? You can still get suggestions with a quick self-check." },
-  focusTodayQuestion: { tr: "Bugün en çok neye çalıştın?", en: "What did you focus on most today?" },
-  chooseOptionLabel: { tr: "Seç", en: "Select" },
-  getFeedbackLabel: { tr: "Geri bildirim al", en: "Get feedback" },
-  chooseAnAreaError: { tr: "Bir alan seç", en: "Choose an area" },
-  suggestedDrillLabel: { tr: "Önerilen drill", en: "Suggested drill" },
-  guardOpt: { tr: "Sol el / guard", en: "Lead hand / guard" },
-  footworkOpt: { tr: "Ayak işi", en: "Footwork" },
-  hookPowerOpt: { tr: "Kroşe / vuruş gücü", en: "Hook / punching power" },
 
   // Community
   composePlaceholder: { tr: "Topluluğa bir şey sor ya da paylaş...", en: "Ask or share something with the community..." },
@@ -116,16 +101,18 @@ const translations = {
     tr: "Şu an kendi değerlendirmen gösteriliyor. Antrenman kaydettikçe burada gerçek gelişim izlenmeye başlayacak.",
     en: "This currently shows your own self-assessment. As you log sessions, real progress tracking will start here.",
   },
-  storageErrorNote: { tr: "Veriler kaydedilirken bir sorun oldu, bu oturumda geçici kalabilir.", en: "There was a problem saving your data, it may only last this session." },
+  loadErrorNote: { tr: "Veriler yüklenirken bir sorun oldu.", en: "There was a problem loading your data." },
   privacyNote: {
-    tr: "Günlüğün sadece sana özel saklanır. Topluluk paylaşımları bu artifact'ı kullanan herkese açıktır.",
-    en: "Your journal is stored privately, just for you. Community posts are visible to everyone using this artifact.",
+    tr: "Günlüğün sadece sana özel saklanır. Topluluk paylaşımları hesabı olan herkese açıktır.",
+    en: "Your journal is stored privately, just for you. Community posts are visible to everyone with an account.",
   },
   focusPointLabel: { tr: "Odak noktası:", en: "Focus:" },
 
   // Onboarding
   onboardingTitle: { tr: "Seni tanıyalım", en: "Let's get to know you" },
   onboardingSubtitle: { tr: "Bu bilgiler AI koçun sana daha doğru geri bildirim verebilmesi için kullanılacak.", en: "This helps your AI coach give you more accurate feedback." },
+  displayNameQuestion: { tr: "İsmin ne?", en: "What's your name?" },
+  displayNamePlaceholder: { tr: "Adın Soyadın", en: "Your name" },
   yearsQuestion: { tr: "Kaç yıldır boks yapıyorsun?", en: "How many years have you been boxing?" },
   yearsUnder1: { tr: "1 yıldan az", en: "Less than 1 year" },
   years1to2: { tr: "1-2 yıl", en: "1-2 years" },
@@ -149,7 +136,8 @@ const translations = {
   strengthsQuestion: { tr: "En güçlü olduğun alanlar", en: "Your strongest areas" },
   weaknessesQuestion: { tr: "Geliştirmek istediğin alanlar", en: "Areas you want to improve" },
   selfRateQuestion: { tr: "Kendini 0-100 arası değerlendir", en: "Rate yourself 0-100" },
-  yearsStyleRequiredError: { tr: "Deneyim süreni ve stilini seç", en: "Select your experience and style" },
+  requiredFieldsError: { tr: "İsmini, deneyim süreni ve stilini gir", en: "Enter your name, experience, and style" },
+  chooseOptionLabel: { tr: "Seç", en: "Select" },
   loadingLabel: { tr: "Yükleniyor…", en: "Loading…" },
   planJournalLinkNote: { tr: "İşaretlediğin antrenmanlar Günlük sekmesinde de görünür.", en: "Sessions you check off also appear in the Journal tab." },
 };
@@ -167,6 +155,13 @@ function timeAgo(timestamp, lang) {
   if (diffMin < 60) return lang === "en" ? `${diffMin}m ago` : `${diffMin} dk önce`;
   if (diffHour < 24) return lang === "en" ? `${diffHour}h ago` : `${diffHour}s önce`;
   return lang === "en" ? `${diffDay}d ago` : `${diffDay}g önce`;
+}
+
+function computeInitials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((p) => p[0].toUpperCase());
+  return letters.join("") || "?";
 }
 
 const categoryTranslations = {
@@ -205,76 +200,6 @@ const weekDaysEn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function wd(lang) {
   return lang === "en" ? weekDaysEn : weekDaysTr;
 }
-
-const initialEntries = [
-  {
-    id: 3,
-    label: "Bugün",
-    type: "Shadowbox",
-    duration: "32 dk",
-    note: "AI analiz: sol el çenede düşük kalıyor, bel dönüşü geçen haftaya göre güçlendi.",
-    tags: [
-      { text: "sol el düşük", tone: "warn" },
-      { text: "bel dönüşü ↑", tone: "good" },
-    ],
-    hasVideo: true,
-  },
-  {
-    id: 2,
-    label: "Dün",
-    type: "Pad çalışması",
-    duration: "45 dk",
-    note: "Kombinasyon sonrası savunmaya dönüş hızlandı, sağ hook'ta denge daha stabil.",
-    tags: [{ text: "denge ↑", tone: "good" }],
-    hasVideo: false,
-  },
-  {
-    id: 1,
-    label: "Pazartesi",
-    type: "Teknik antrenman",
-    duration: "28 dk",
-    note: "Philly shell geçişlerinde omuz açısı çalışıldı.",
-    tags: [],
-    hasVideo: false,
-  },
-];
-
-const initialPosts = [
-  {
-    id: 3,
-    name: "Coach Mert T.",
-    initials: "MT",
-    timestamp: Date.now() - 3 * 60 * 60 * 1000,
-    text: "Bu hafta çalışacağınız bir şey: jab attıktan sonra elinizi geri çekerken çenenizi kapatın. Küçük bir detay ama maçta fark yaratıyor. Kendi kanalımda tam versiyonu var, bakmak isteyen çıksın.",
-    stat: null,
-    likes: 47,
-    comments: 9,
-    liked: false,
-    verified: true,
-  },
-  {
-    id: 1,
-    name: "Emir K.",
-    initials: "EK",
-    timestamp: Date.now() - 5 * 60 * 60 * 1000,
-    text: "Philly shell'de omuz pozisyonunu bir türlü tutturamıyorum, ayna karşısında çalışan var mı?",
-    stat: null,
-    likes: 12,
-    comments: 4,
-    liked: false,
-  },
-  {
-    id: 2,
-    name: "Berk Y.",
-    initials: "BY",
-    timestamp: Date.now() - 30 * 60 * 60 * 1000,
-    text: null,
-    stat: "12 haftalık ilerlemesini paylaştı",
-    likes: 31,
-    comments: 6,
-    liked: false,
-  },
-];
 
 const matchNews = [
   {
@@ -371,8 +296,8 @@ function StatCard({ label, value }) {
 function mostImprovedTag(entries) {
   const counts = {};
   entries.forEach((e) =>
-    e.tags.forEach((t) => {
-      if (t.tone === "good") counts[t.text] = (counts[t.text] || 0) + 1;
+    e.tags.forEach((tag) => {
+      if (tag.tone === "good") counts[tag.text] = (counts[tag.text] || 0) + 1;
     })
   );
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -391,10 +316,10 @@ function WeeklySummary({ entries, lang }) {
       <p className="text-neutral-300 text-xs leading-relaxed">
         {lang === "en"
           ? `You completed ${entries.length} sessions this week.${
-              improvedLabel ? ` Your most improved area: ${improvedLabel}.` : " Keep going and your AI coach will start spotting patterns."
+              improvedLabel ? ` Your most improved area: ${improvedLabel}.` : " Keep logging sessions and your AI coach will start spotting patterns."
             }`
           : `Bu hafta ${entries.length} seans tamamladın.${
-              improvedLabel ? ` En çok gelişen alanın: ${improvedLabel}.` : " Devam ettikçe AI koç örüntüleri çıkarmaya başlayacak."
+              improvedLabel ? ` En çok gelişen alanın: ${improvedLabel}.` : " Seans kaydettikçe AI koç örüntüleri çıkarmaya başlayacak."
             }`}
       </p>
     </div>
@@ -523,7 +448,7 @@ function getFighterProfile(style, school) {
   return { reference: null, focus: null, quote: null, drill: base.drill, matched: false };
 }
 
-function CoachTip({ entries, profileInfo, lang }) {
+function CoachTip({ userId, entries, profileInfo, lang }) {
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
   const [tip, setTip] = useState(null);
   const [tipError, setTipError] = useState(false);
@@ -533,21 +458,27 @@ function CoachTip({ entries, profileInfo, lang }) {
     let cancelled = false;
     setTipLoading(true);
     setTipError(false);
-    getJournalTip({ profile: profileInfo, entries, lang })
-      .then((res) => {
+    (async () => {
+      let recentChat = [];
+      try {
+        recentChat = await getChatMessages(userId);
+      } catch (e) {
+        // proceed without chat context
+      }
+      try {
+        const res = await getJournalTip({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), lang });
         if (!cancelled) setTip(res);
-      })
-      .catch(() => {
+      } catch (e) {
         if (!cancelled) setTipError(true);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setTipLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries.length, profileInfo.style, profileInfo.school, lang]);
+  }, [userId, entries.length, profileInfo.style, profileInfo.school, lang]);
 
   const drill = tip?.drill || fighter.drill;
 
@@ -616,7 +547,7 @@ function StreakStrip({ entries, lang }) {
   );
 }
 
-function JournalTab({ entries, onAddClick, profileInfo, lang }) {
+function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
   const streak = entries.length > 0 ? entries.length + 6 : 0;
   const weekCount = entries.length;
 
@@ -632,45 +563,47 @@ function JournalTab({ entries, onAddClick, profileInfo, lang }) {
       <StreakStrip entries={entries} lang={lang} />
 
       <WeeklySummary entries={entries} lang={lang} />
-      <CoachTip entries={entries} profileInfo={profileInfo} lang={lang} />
+      <CoachTip userId={userId} entries={entries} profileInfo={profileInfo} lang={lang} />
 
-      <div className="flex flex-col gap-2.5 mb-4">
-        {entries.map((e) => (
-          <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-neutral-100 text-sm font-medium">
-                {e.label} · {ts(e.type, lang)}
-              </span>
-              <span className="text-neutral-500 text-xs">{e.duration}</span>
-            </div>
-            {typeof e.id === "string" && e.id.startsWith("plan-") && (
-              <span className="inline-block text-[10px] text-red-500 mb-1.5">{t(lang, "markedFromCalendar")}</span>
-            )}
-
-            {e.hasVideo && (
-              <div className="relative bg-neutral-950 border border-neutral-800 rounded-lg h-20 flex items-center justify-center mb-2">
-                <Video size={20} className="text-neutral-600" />
-                <span className="absolute top-1.5 left-1.5 text-[10px] bg-red-950 text-red-400 border border-red-900 px-1.5 py-0.5 rounded">
-                  {t(lang, "newBadge")}
+      {entries.length > 0 && (
+        <div className="flex flex-col gap-2.5 mb-4">
+          {entries.map((e) => (
+            <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-neutral-100 text-sm font-medium">
+                  {e.label} · {ts(e.type, lang)}
                 </span>
+                <span className="text-neutral-500 text-xs">{e.duration}</span>
               </div>
-            )}
+              {e.planKey && (
+                <span className="inline-block text-[10px] text-red-500 mb-1.5">{t(lang, "markedFromCalendar")}</span>
+              )}
 
-            <p className="text-neutral-400 text-xs leading-relaxed mb-2">{e.note}</p>
-
-            {e.tags.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap">
-                {e.tags.map((tag, i) => (
-                  <span key={i} className={`text-[11px] px-2 py-0.5 rounded ${TAG_TONE[tag.tone]}`}>
-                    {tt(tag.text.replace(" ↑", ""), lang)}
-                    {tag.text.includes("↑") ? " ↑" : ""}
+              {e.hasVideo && (
+                <div className="relative bg-neutral-950 border border-neutral-800 rounded-lg h-20 flex items-center justify-center mb-2">
+                  <Video size={20} className="text-neutral-600" />
+                  <span className="absolute top-1.5 left-1.5 text-[10px] bg-red-950 text-red-400 border border-red-900 px-1.5 py-0.5 rounded">
+                    {t(lang, "newBadge")}
                   </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                </div>
+              )}
+
+              <p className="text-neutral-400 text-xs leading-relaxed mb-2">{e.note}</p>
+
+              {e.tags.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {e.tags.map((tag, i) => (
+                    <span key={i} className={`text-[11px] px-2 py-0.5 rounded ${TAG_TONE[tag.tone]}`}>
+                      {tt(tag.text.replace(" ↑", ""), lang)}
+                      {tag.text.includes("↑") ? " ↑" : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         onClick={onAddClick}
@@ -688,13 +621,19 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
   const [duration, setDuration] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (!duration.trim() || !note.trim()) {
       setError(t(lang, "fillDurationNoteError"));
       return;
     }
-    onSubmit({ type, duration: `${duration} dk`, note });
+    setSaving(true);
+    try {
+      await onSubmit({ type, duration: `${duration} dk`, note });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -739,9 +678,10 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
 
         <button
           onClick={submit}
-          className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2 mt-2 transition-colors"
+          disabled={saving}
+          className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-sm rounded-lg py-2 mt-2 transition-colors"
         >
-          {t(lang, "saveLabel")}
+          {saving ? t(lang, "loadingLabel") : t(lang, "saveLabel")}
         </button>
       </div>
     </div>
@@ -751,15 +691,21 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
 function ComposeBox({ onSubmit, lang }) {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [posting, setPosting] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (!text.trim()) {
       setError(t(lang, "emptyPostError"));
       return;
     }
-    onSubmit(text);
-    setText("");
-    setError("");
+    setPosting(true);
+    try {
+      await onSubmit(text);
+      setText("");
+      setError("");
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
@@ -775,9 +721,10 @@ function ComposeBox({ onSubmit, lang }) {
       <div className="flex justify-end">
         <button
           onClick={submit}
-          className="bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-xs rounded-lg px-3 py-1.5 transition-colors"
+          disabled={posting}
+          className="bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-xs rounded-lg px-3 py-1.5 transition-colors"
         >
-          {t(lang, "shareLabel")}
+          {posting ? t(lang, "loadingLabel") : t(lang, "shareLabel")}
         </button>
       </div>
     </div>
@@ -835,55 +782,61 @@ function CommunityTab({ posts, onLike, onPost, lang }) {
         <MatchNewsList />
       ) : (
         <>
-      <ComposeBox onSubmit={onPost} lang={lang} />
-      <div className="flex flex-col gap-2.5">
-        {posts
-          .slice()
-          .sort((a, b) => b.timestamp - a.timestamp)
-          .map((p) => (
-          <div key={p.id} className={`bg-neutral-900 rounded-xl p-3 ${p.verified ? "border border-red-900" : "border border-neutral-800"}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-                  p.verified ? "bg-red-600 text-neutral-950" : "bg-red-950 border border-red-900 text-red-500"
-                }`}
-              >
-                {p.initials}
-              </div>
-              <span className="text-neutral-100 text-sm font-medium">{p.name}</span>
-              {p.verified && (
-                <span className="flex items-center gap-0.5 text-red-500 text-[10px] bg-red-950 border border-red-900 px-1.5 py-0.5 rounded">
-                  <BadgeCheck size={11} /> {t(lang, "verifiedCoachLabel")}
-                </span>
-              )}
-              <span className="text-neutral-600 text-xs">{timeAgo(p.timestamp, lang)}</span>
+          <ComposeBox onSubmit={onPost} lang={lang} />
+          {posts.length === 0 ? (
+            <p className="text-neutral-700 text-xs text-center py-6">
+              {lang === "en" ? "No posts yet. Be the first to share something." : "Henüz gönderi yok. İlk paylaşımı sen yap."}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {posts
+                .slice()
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .map((p) => (
+                  <div key={p.id} className={`bg-neutral-900 rounded-xl p-3 ${p.verified ? "border border-red-900" : "border border-neutral-800"}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
+                          p.verified ? "bg-red-600 text-neutral-950" : "bg-red-950 border border-red-900 text-red-500"
+                        }`}
+                      >
+                        {p.initials}
+                      </div>
+                      <span className="text-neutral-100 text-sm font-medium">{p.name}</span>
+                      {p.verified && (
+                        <span className="flex items-center gap-0.5 text-red-500 text-[10px] bg-red-950 border border-red-900 px-1.5 py-0.5 rounded">
+                          <BadgeCheck size={11} /> {t(lang, "verifiedCoachLabel")}
+                        </span>
+                      )}
+                      <span className="text-neutral-600 text-xs">{timeAgo(p.timestamp, lang)}</span>
+                    </div>
+
+                    {p.text && <p className="text-neutral-300 text-sm leading-relaxed mb-2">{p.text}</p>}
+
+                    {p.stat && (
+                      <div className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
+                        <TrendingUp size={15} className="text-red-500" />
+                        <span className="text-neutral-400 text-xs">{p.stat}</span>
+                      </div>
+                    )}
+
+                    <div className="flex gap-4 text-xs text-neutral-500">
+                      <button
+                        onClick={() => onLike(p.id)}
+                        className="flex items-center gap-1 hover:text-red-500 transition-colors"
+                      >
+                        <Heart size={14} className={p.liked ? "text-red-500" : ""} fill={p.liked ? "currentColor" : "none"} />
+                        {p.likes}
+                      </button>
+                      <span className="flex items-center gap-1">
+                        <MessageCircle size={14} />
+                        {p.comments}
+                      </span>
+                    </div>
+                  </div>
+                ))}
             </div>
-
-            {p.text && <p className="text-neutral-300 text-sm leading-relaxed mb-2">{p.text}</p>}
-
-            {p.stat && (
-              <div className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
-                <TrendingUp size={15} className="text-red-500" />
-                <span className="text-neutral-400 text-xs">{p.stat}</span>
-              </div>
-            )}
-
-            <div className="flex gap-4 text-xs text-neutral-500">
-              <button
-                onClick={() => onLike(p.id)}
-                className="flex items-center gap-1 hover:text-red-500 transition-colors"
-              >
-                <Heart size={14} className={p.liked ? "text-red-500" : ""} fill={p.liked ? "currentColor" : "none"} />
-                {p.likes}
-              </button>
-              <span className="flex items-center gap-1">
-                <MessageCircle size={14} />
-                {p.comments}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          )}
         </>
       )}
     </div>
@@ -947,9 +900,10 @@ function SkillBar({ skill, value }) {
   );
 }
 
-function ProfileTab({ entries, profileInfo, onReset, storageError, lang }) {
+function ProfileTab({ entries, profileInfo, onReset, onSignOut, loadError, lang }) {
   const skillData = CATEGORY_LIST.map((skill) => ({ skill, value: profileInfo.ratings[skill] ?? 50 }));
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
+  const initials = computeInitials(profileInfo.displayName);
 
   return (
     <div className="px-5 pb-5">
@@ -957,10 +911,10 @@ function ProfileTab({ entries, profileInfo, onReset, storageError, lang }) {
 
       <div className="flex items-center gap-3 mb-4">
         <div className="w-12 h-12 rounded-full bg-red-950 border border-red-900 flex items-center justify-center text-red-500 text-sm font-medium">
-          EK
+          {initials}
         </div>
         <div>
-          <p className="text-neutral-100 text-sm font-medium">Emir K.</p>
+          <p className="text-neutral-100 text-sm font-medium">{profileInfo.displayName}</p>
           <p className="text-neutral-500 text-xs">
             {profileInfo.style || t(lang, "styleUnset")} · {profileInfo.years || "—"}
             {profileInfo.school && profileInfo.school !== "Karma / henüz yok" ? ` · ${profileInfo.school}` : ""}
@@ -1035,153 +989,20 @@ function ProfileTab({ entries, profileInfo, onReset, storageError, lang }) {
         <SkillBar key={s.skill} skill={tc(s.skill, lang)} value={s.value} />
       ))}
 
-      {storageError && <p className="text-red-400 text-[11px] mt-4">{t(lang, "storageErrorNote")}</p>}
+      {loadError && <p className="text-red-400 text-[11px] mt-4">{t(lang, "loadErrorNote")}</p>}
 
       <div className="border-t border-neutral-800 mt-4 pt-4">
         <p className="text-neutral-600 text-[11px] mb-2">{t(lang, "privacyNote")}</p>
-        <button onClick={onReset} className="text-neutral-500 text-xs hover:text-neutral-300 transition-colors">
-          {t(lang, "resetLabel")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function VideoAnalysis({ lang }) {
-  const [status, setStatus] = useState("idle");
-
-  return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-      {status === "idle" ? (
-        <button
-          onClick={() => setStatus("done")}
-          className="w-full border border-dashed border-neutral-700 rounded-lg py-6 flex flex-col items-center gap-2 hover:border-red-800 transition-colors"
-        >
-          <Upload size={20} className="text-neutral-500" />
-          <span className="text-neutral-400 text-xs">{t(lang, "uploadShadowboxLabel")}</span>
-        </button>
-      ) : (
-        <div>
-          <div className="relative bg-neutral-950 border border-neutral-800 rounded-lg h-24 flex items-center justify-center mb-3">
-            <Video size={20} className="text-neutral-600" />
-            <span className="absolute top-1.5 left-1.5 text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-900 px-1.5 py-0.5 rounded flex items-center gap-1">
-              <CircleCheck size={10} /> {t(lang, "analysisCompleteLabel")}
-            </span>
-          </div>
-          <div className="flex flex-col gap-2 mb-3">
-            <div className="flex items-start gap-2">
-              <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded whitespace-nowrap">
-                {tt("sol el düşük", lang)}
-              </span>
-              <p className="text-neutral-400 text-xs leading-relaxed">{lang === "en" ? "Repeated for 8 frames after the jab" : "Jab sonrası 8 karede tekrar etti"}</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[11px] bg-emerald-950 text-emerald-400 border border-emerald-900 px-2 py-0.5 rounded whitespace-nowrap">
-                {tt("bel dönüşü", lang)} ↑
-              </span>
-              <p className="text-neutral-400 text-xs leading-relaxed">{lang === "en" ? "18% stronger rotation than last week" : "Geçen haftaya göre %18 daha güçlü rotasyon"}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setStatus("idle")}
-            className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded-lg py-2 transition-colors"
-          >
-            {t(lang, "uploadNewVideoLabel")}
+        <div className="flex items-center gap-4">
+          <button onClick={onReset} className="text-neutral-500 text-xs hover:text-neutral-300 transition-colors">
+            {t(lang, "resetLabel")}
+          </button>
+          <button onClick={onSignOut} className="flex items-center gap-1 text-neutral-500 text-xs hover:text-neutral-300 transition-colors">
+            <LogOut size={12} />
+            {t(lang, "signOutLabel")}
           </button>
         </div>
-      )}
-    </div>
-  );
-}
-
-function NoVideoCheckin({ lang }) {
-  const [focus, setFocus] = useState("");
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    if (!focus) {
-      setError(t(lang, "chooseAnAreaError"));
-      return;
-    }
-    setError("");
-    setResult(null);
-    setLoading(true);
-    try {
-      const res = await getQuickCheckin({ focus, lang });
-      setResult(res);
-    } catch (e) {
-      setError(lang === "en" ? "Couldn't reach the AI coach, try again." : "AI koça ulaşılamadı, tekrar dene.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-      <p className="text-neutral-400 text-xs mb-2">{t(lang, "noVideoIntro")}</p>
-
-      <label className="text-neutral-500 text-xs block mb-1">{t(lang, "focusTodayQuestion")}</label>
-      <select
-        value={focus}
-        onChange={(e) => setFocus(e.target.value)}
-        className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-2"
-      >
-        <option value="">{t(lang, "chooseOptionLabel")}</option>
-        <option value="Sol el / guard">{t(lang, "guardOpt")}</option>
-        <option value="Ayak işi">{t(lang, "footworkOpt")}</option>
-        <option value="Kroşe / vuruş gücü">{t(lang, "hookPowerOpt")}</option>
-      </select>
-      {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
-
-      <button
-        onClick={submit}
-        disabled={loading}
-        className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-xs rounded-lg py-2 transition-colors"
-      >
-        {loading ? t(lang, "loadingLabel") : t(lang, "getFeedbackLabel")}
-      </button>
-
-      {result && (
-        <div className="mt-3 pt-3 border-t border-neutral-800">
-          <p className="text-neutral-300 text-xs leading-relaxed mb-2">{result.result}</p>
-          <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "suggestedDrillLabel")}</p>
-          <p className="text-neutral-200 text-xs">{result.drill}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AICoachTab({ lang }) {
-  const [mode, setMode] = useState("video");
-
-  return (
-    <div className="px-5 pb-5">
-      <p className="text-neutral-100 text-base font-medium mb-1">{t(lang, "aiCoachTitle")}</p>
-      <p className="text-neutral-500 text-xs mb-3">{t(lang, "aiCoachSubtitle")}</p>
-
-      <div className="flex bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 mb-3">
-        <button
-          onClick={() => setMode("video")}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
-            mode === "video" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
-          }`}
-        >
-          {t(lang, "videoAnalysisLabel")}
-        </button>
-        <button
-          onClick={() => setMode("text")}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
-            mode === "text" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
-          }`}
-        >
-          {t(lang, "withoutVideoLabel")}
-        </button>
       </div>
-
-      {mode === "video" ? <VideoAnalysis lang={lang} /> : <NoVideoCheckin lang={lang} />}
     </div>
   );
 }
@@ -1632,6 +1453,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang }) {
 }
 
 function OnboardingForm({ onComplete, lang }) {
+  const [displayName, setDisplayName] = useState("");
   const [years, setYears] = useState("");
   const [style, setStyle] = useState("");
   const [school, setSchool] = useState("");
@@ -1639,6 +1461,7 @@ function OnboardingForm({ onComplete, lang }) {
   const [weaknesses, setWeaknesses] = useState([]);
   const [ratings, setRatings] = useState({ Güç: 50, Defans: 50, Teknik: 50, Agresiflik: 50, Footwork: 50 });
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const toggleStrength = (cat) => {
     setStrengths((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
@@ -1648,13 +1471,18 @@ function OnboardingForm({ onComplete, lang }) {
   };
   const setRating = (cat, val) => setRatings({ ...ratings, [cat]: Number(val) });
 
-  const submit = () => {
-    if (!years || !style) {
-      setError(t(lang, "yearsStyleRequiredError"));
+  const submit = async () => {
+    if (!displayName.trim() || !years || !style) {
+      setError(t(lang, "requiredFieldsError"));
       return;
     }
     setError("");
-    onComplete({ years, style, school, strengths, weaknesses, ratings });
+    setSaving(true);
+    try {
+      await onComplete({ displayName: displayName.trim(), years, style, school, strengths, weaknesses, ratings });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1663,6 +1491,14 @@ function OnboardingForm({ onComplete, lang }) {
         {t(lang, "onboardingTitle")}
       </p>
       <p className="text-neutral-500 text-xs mb-4">{t(lang, "onboardingSubtitle")}</p>
+
+      <label className="text-neutral-500 text-xs block mb-1">{t(lang, "displayNameQuestion")}</label>
+      <input
+        value={displayName}
+        onChange={(e) => setDisplayName(e.target.value)}
+        placeholder={t(lang, "displayNamePlaceholder")}
+        className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-3"
+      />
 
       <label className="text-neutral-500 text-xs block mb-1">{t(lang, "yearsQuestion")}</label>
       <select
@@ -1762,9 +1598,10 @@ function OnboardingForm({ onComplete, lang }) {
 
       <button
         onClick={submit}
-        className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
+        disabled={saving}
+        className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-60 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
       >
-        {t(lang, "startLabel")}
+        {saving ? t(lang, "loadingLabel") : t(lang, "startLabel")}
       </button>
     </div>
   );
@@ -1781,161 +1618,150 @@ function NavButton({ active, icon: Icon, label, onClick }) {
 
 export default function TheCornerApp() {
   const [tab, setTab] = useState("journal");
+  const [session, setSession] = useState(undefined);
+  const [profileInfo, setProfileInfo] = useState(null);
   const [entries, setEntries] = useState([]);
   const [posts, setPosts] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [storageError, setStorageError] = useState(false);
-  const [profileInfo, setProfileInfo] = useState(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [lang, setLang] = useState("tr");
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (!newSession) {
+        setProfileInfo(null);
+        setEntries([]);
+        setPosts([]);
+        setDataLoading(true);
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
     let cancelled = false;
-
-    async function load() {
-      let loadedEntries = initialEntries;
-      let loadedPosts = initialPosts;
-      let loadedProfile = null;
-      let loadedLang = "tr";
-
+    setDataLoading(true);
+    setLoadError(false);
+    (async () => {
       try {
-        const res = await storage.get("journal-entries", false);
-        if (res && res.value) loadedEntries = JSON.parse(res.value);
+        const [profile, journalEntries, communityPosts] = await Promise.all([
+          getProfile(session.user.id),
+          getJournalEntries(session.user.id),
+          getCommunityPosts(session.user.id),
+        ]);
+        if (cancelled) return;
+        setProfileInfo(profile);
+        setEntries(journalEntries);
+        setPosts(communityPosts);
+        if (profile?.lang) setLang(profile.lang);
       } catch (e) {
-        try {
-          await storage.set("journal-entries", JSON.stringify(initialEntries), false);
-        } catch (e2) {
-          setStorageError(true);
-        }
+        if (!cancelled) setLoadError(true);
+      } finally {
+        if (!cancelled) setDataLoading(false);
       }
-
-      try {
-        const res = await storage.get("community-posts", true);
-        if (res && res.value) loadedPosts = JSON.parse(res.value);
-      } catch (e) {
-        try {
-          await storage.set("community-posts", JSON.stringify(initialPosts), true);
-        } catch (e2) {
-          setStorageError(true);
-        }
-      }
-
-      try {
-        const res = await storage.get("profile-info", false);
-        if (res && res.value) loadedProfile = JSON.parse(res.value);
-      } catch (e) {
-        // no profile yet, onboarding will handle it
-      }
-
-      try {
-        const res = await storage.get("app-lang", false);
-        if (res && res.value) loadedLang = res.value;
-      } catch (e) {
-        // default tr
-      }
-
-      if (!cancelled) {
-        setEntries(loadedEntries);
-        setPosts(loadedPosts);
-        setProfileInfo(loadedProfile);
-        setLang(loadedLang);
-        setLoading(false);
-      }
-    }
-
-    load();
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session?.user?.id]);
 
-  const persistEntries = async (next) => {
-    setEntries(next);
-    try {
-      await storage.set("journal-entries", JSON.stringify(next), false);
-    } catch (e) {
-      setStorageError(true);
-    }
-  };
-
-  const persistPosts = async (next) => {
-    setPosts(next);
-    try {
-      await storage.set("community-posts", JSON.stringify(next), true);
-    } catch (e) {
-      setStorageError(true);
-    }
-  };
-
-  const addEntry = ({ type, duration, note }) => {
-    persistEntries([{ id: Date.now(), label: "Şimdi", type, duration, note, tags: [], hasVideo: false }, ...entries]);
+  const addEntry = async ({ type, duration, note }) => {
+    const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, duration, note, tags: [], hasVideo: false });
+    setEntries((prev) => [entry, ...prev]);
     setShowForm(false);
   };
 
-  const toggleLike = (id) => {
-    persistPosts(
-      posts.map((p) =>
-        p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
-      )
-    );
+  const toggleLike = async (id) => {
+    const post = posts.find((p) => p.id === id);
+    if (!post) return;
+    const wasLiked = post.liked;
+    const prevLikes = post.likes;
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, liked: !wasLiked, likes: wasLiked ? p.likes - 1 : p.likes + 1 } : p)));
+    try {
+      await toggleLikeDb(id, session.user.id, wasLiked);
+    } catch (e) {
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, liked: wasLiked, likes: prevLikes } : p)));
+    }
   };
 
-  const addPost = (text) => {
-    persistPosts([
-      { id: Date.now(), name: "Sen", initials: "SN", timestamp: Date.now(), text, stat: null, likes: 0, comments: 0, liked: false },
-      ...posts,
-    ]);
+  const addPost = async (text) => {
+    const name = profileInfo?.displayName || "—";
+    const initials = computeInitials(name);
+    await addCommunityPost(session.user.id, { name, initials, text });
+    const refreshed = await getCommunityPosts(session.user.id);
+    setPosts(refreshed);
   };
 
-  const addPlanEntry = (p) => {
-    const id = `plan-${p.day}-${p.title}`;
-    if (entries.some((e) => e.id === id)) return;
-    persistEntries([
-      { id, label: p.day, type: p.title, duration: p.duration || "—", note: p.note, tags: [], hasVideo: false },
-      ...entries,
-    ]);
+  const addPlanEntry = async (p) => {
+    const planKey = `${p.day}-${p.title}`;
+    if (entries.some((e) => e.planKey === planKey)) return;
+    const entry = await addJournalEntry(session.user.id, {
+      label: p.day,
+      type: p.title,
+      duration: p.duration || "—",
+      note: p.note,
+      tags: [],
+      hasVideo: false,
+      planKey,
+    });
+    setEntries((prev) => [entry, ...prev]);
   };
 
-  const removePlanEntry = (p) => {
-    const id = `plan-${p.day}-${p.title}`;
-    persistEntries(entries.filter((e) => e.id !== id));
+  const removePlanEntry = async (p) => {
+    const planKey = `${p.day}-${p.title}`;
+    await deleteJournalEntryByPlanKey(session.user.id, planKey);
+    setEntries((prev) => prev.filter((e) => e.planKey !== planKey));
   };
 
   const resetData = async () => {
-    await persistEntries(initialEntries);
-    await persistPosts(initialPosts);
-    try {
-      await storage.delete("profile-info", false);
-    } catch (e) {
-      // ignore
-    }
+    await resetJournalEntries(session.user.id);
+    await resetChatMessages(session.user.id);
+    await deleteProfile(session.user.id);
+    setEntries([]);
     setProfileInfo(null);
   };
 
   const completeOnboarding = async (data) => {
+    await upsertProfile(session.user.id, { ...data, lang });
     setProfileInfo(data);
-    try {
-      await storage.set("profile-info", JSON.stringify(data), false);
-    } catch (e) {
-      setStorageError(true);
-    }
   };
 
   const toggleLang = async () => {
     const next = lang === "tr" ? "en" : "tr";
     setLang(next);
-    try {
-      await storage.set("app-lang", next, false);
-    } catch (e) {
-      // non-critical, keep local state even if save fails
+    if (session && profileInfo) {
+      try {
+        await upsertProfile(session.user.id, { ...profileInfo, lang: next });
+      } catch (e) {
+        // non-critical, keep local state even if save fails
+      }
     }
   };
 
-  if (loading) {
+  const signOut = () => {
+    supabase.auth.signOut();
+  };
+
+  if (session === undefined || (session && dataLoading)) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
         <div className="w-full max-w-sm flex items-center justify-center" style={{ minHeight: 640 }}>
           <p className="text-neutral-600 text-sm">{t(lang, "loadingLabel")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
+        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
+          <Header lang={lang} onToggleLang={toggleLang} />
+          <AuthScreen lang={lang} />
         </div>
       </div>
     );
@@ -1962,16 +1788,16 @@ export default function TheCornerApp() {
             showForm ? (
               <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
             ) : (
-              <JournalTab entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
+              <JournalTab userId={session.user.id} entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
             )
           ) : tab === "coach" ? (
-            <AICoachTab lang={lang} />
+            <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} />
           ) : tab === "calendar" ? (
             <CalendarTab onMarkDone={addPlanEntry} onUnmarkDone={removePlanEntry} lang={lang} />
           ) : tab === "community" ? (
             <CommunityTab posts={posts} onLike={toggleLike} onPost={addPost} lang={lang} />
           ) : (
-            <ProfileTab entries={entries} profileInfo={profileInfo} onReset={resetData} storageError={storageError} lang={lang} />
+            <ProfileTab entries={entries} profileInfo={profileInfo} onReset={resetData} onSignOut={signOut} loadError={loadError} lang={lang} />
           )}
         </div>
 

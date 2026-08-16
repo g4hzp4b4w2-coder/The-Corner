@@ -1,7 +1,16 @@
-async function callCoach(payload) {
-  const res = await fetch("/api/coach", {
+import { supabase } from "./supabaseClient";
+
+async function authHeader() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function callApi(path, payload) {
+  const headers = { "content-type": "application/json", ...(await authHeader()) };
+  const res = await fetch(path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -11,10 +20,10 @@ async function callCoach(payload) {
   return res.json();
 }
 
-export function getJournalTip({ profile, entries, lang }) {
-  return callCoach({ mode: "journal-tip", profile, entries, lang });
+export function getJournalTip({ profile, entries, recentChat, lang }) {
+  return callApi("/api/coach", { mode: "journal-tip", profile, entries, recentChat, lang });
 }
 
-export function getQuickCheckin({ focus, lang }) {
-  return callCoach({ mode: "quick-checkin", focus, lang });
+export function getChatReply({ messages, profile, entries, lang }) {
+  return callApi("/api/coach-chat", { messages, profile, entries, lang });
 }
