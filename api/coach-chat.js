@@ -84,7 +84,11 @@ export default async function handler(req, res) {
   }
 
   const recentMessages = messages.slice(-30);
-  const priorMessages = recentMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+  // Anthropic requires strictly alternating roles, so a stale empty message
+  // (e.g. from a past failure) gets a placeholder instead of being dropped.
+  const priorMessages = recentMessages
+    .slice(0, -1)
+    .map((m) => ({ role: m.role, content: m.content && m.content.trim() ? m.content : "…" }));
   const last = recentMessages[recentMessages.length - 1];
 
   const hasImages = Array.isArray(images) && images.length > 0;
@@ -127,7 +131,17 @@ export default async function handler(req, res) {
     }
 
     const data = await anthropicRes.json();
-    const reply = data?.content?.[0]?.text || "";
+    const reply = (data?.content || [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+
+    if (!reply) {
+      res.status(502).json({ error: "Coach returned an empty response" });
+      return;
+    }
+
     res.status(200).json({ reply });
   } catch (err) {
     res.status(500).json({ error: err.message || "Unknown error" });
