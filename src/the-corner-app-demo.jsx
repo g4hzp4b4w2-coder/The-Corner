@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
-import { supabase } from "./lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
   getProfile,
   upsertProfile,
@@ -1628,6 +1628,7 @@ export default function TheCornerApp() {
   const [lang, setLang] = useState("tr");
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
@@ -1745,6 +1746,26 @@ export default function TheCornerApp() {
   const signOut = () => {
     supabase.auth.signOut();
   };
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
+        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
+          <Header lang={lang} onToggleLang={toggleLang} />
+          <div className="px-5 py-10 flex-1 flex flex-col justify-center text-center">
+            <p className="text-neutral-100 text-base font-medium mb-2">
+              {lang === "en" ? "Setup not finished yet" : "Kurulum henüz tamamlanmadı"}
+            </p>
+            <p className="text-neutral-500 text-xs leading-relaxed">
+              {lang === "en"
+                ? "This app needs a Supabase project connected. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment settings, then redeploy."
+                : "Bu uygulamanın bağlı bir Supabase projesine ihtiyacı var. Deploy ayarlarına VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY değişkenlerini ekleyip yeniden deploy et."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (session === undefined || (session && dataLoading)) {
     return (
