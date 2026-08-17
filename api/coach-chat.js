@@ -24,7 +24,7 @@ function buildSystemPrompt(profile, entries, lang) {
 
   const entriesLines = (entries || [])
     .slice(0, 5)
-    .map((e) => `- ${e.type} (${e.duration}): ${e.note}${e.tags?.length ? " [" + e.tags.map((t) => t.text).join(", ") + "]" : ""}`)
+    .map((e) => `- ${e.type} (${e.duration}): ${e.note}${e.blocks?.length ? " {" + e.blocks.join("; ") + "}" : ""}${e.tags?.length ? " [" + e.tags.map((t) => t.text).join(", ") + "]" : ""}`)
     .join("\n");
 
   if (lang === "en") {

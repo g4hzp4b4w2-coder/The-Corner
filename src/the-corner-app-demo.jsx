@@ -62,12 +62,14 @@ const translations = {
   newSessionTitle: { tr: "Yeni seans", en: "New session" },
   typeLabel: { tr: "Tür", en: "Type" },
   durationLabel: { tr: "Süre (dk)", en: "Duration (min)" },
+  blocksLabel: { tr: "Detaylar", en: "Details" },
+  blockPlaceholder: { tr: "örn. 3 raund shadowbox, 50 şınav", en: "e.g. 3 rounds shadowbox, 50 push-ups" },
   noteLabel: { tr: "Not", en: "Note" },
   notePlaceholder: { tr: "Bu seansta neye çalıştın?", en: "What did you work on this session?" },
   saveLabel: { tr: "Kaydet", en: "Save" },
   cancelLabel: { tr: "İptal", en: "Cancel" },
   editProfileLabel: { tr: "Profili düzenle", en: "Edit profile" },
-  fillDurationNoteError: { tr: "Süre ve not alanlarını doldur", en: "Fill in the duration and note fields" },
+  fillDurationNoteError: { tr: "Süre gir, ayrıca bir not ya da en az bir detay ekle", en: "Enter a duration, and either a note or at least one detail" },
   markedFromCalendar: { tr: "Takvimden işaretlendi", en: "Marked from calendar" },
   newBadge: { tr: "yeni", en: "new" },
 
@@ -619,7 +621,18 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
                 </div>
               )}
 
-              <p className="text-neutral-400 text-xs leading-relaxed mb-2">{e.note}</p>
+              {e.blocks?.length > 0 && (
+                <div className="flex flex-col gap-1 mb-2">
+                  {e.blocks.map((b, bi) => (
+                    <div key={bi} className="flex items-center gap-2">
+                      <span className="w-1 h-1 rounded-full bg-neutral-600 shrink-0" />
+                      <span className="text-neutral-300 text-xs">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {e.note && <p className="text-neutral-400 text-xs leading-relaxed mb-2">{e.note}</p>}
 
               {e.tags.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap">
@@ -651,17 +664,28 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
   const [type, setType] = useState("Shadowbox");
   const [duration, setDuration] = useState("");
   const [note, setNote] = useState("");
+  const [blocks, setBlocks] = useState([]);
+  const [blockDraft, setBlockDraft] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const addBlock = () => {
+    const text = blockDraft.trim();
+    if (!text) return;
+    setBlocks((prev) => [...prev, text]);
+    setBlockDraft("");
+  };
+
+  const removeBlock = (i) => setBlocks((prev) => prev.filter((_, idx) => idx !== i));
+
   const submit = async () => {
-    if (!duration.trim() || !note.trim()) {
+    if (!duration.trim() || (!note.trim() && blocks.length === 0)) {
       setError(t(lang, "fillDurationNoteError"));
       return;
     }
     setSaving(true);
     try {
-      await onSubmit({ type, duration: `${duration} dk`, note });
+      await onSubmit({ type, duration: `${duration} dk`, note, blocks });
     } finally {
       setSaving(false);
     }
@@ -696,6 +720,40 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
           placeholder="30"
           className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-3"
         />
+
+        <label className="text-neutral-500 text-xs block mb-1">{t(lang, "blocksLabel")}</label>
+        {blocks.length > 0 && (
+          <div className="flex flex-col gap-1.5 mb-2">
+            {blocks.map((b, i) => (
+              <div key={i} className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-neutral-300 text-xs">{b}</span>
+                <button onClick={() => removeBlock(i)} aria-label="Remove">
+                  <X size={14} className="text-neutral-600" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2 mb-3">
+          <input
+            value={blockDraft}
+            onChange={(e) => setBlockDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addBlock();
+              }
+            }}
+            placeholder={t(lang, "blockPlaceholder")}
+            className="flex-1 bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+          />
+          <button
+            onClick={addBlock}
+            className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded-lg px-3 transition-colors shrink-0"
+          >
+            {t(lang, "addLabel")}
+          </button>
+        </div>
 
         <label className="text-neutral-500 text-xs block mb-1">{t(lang, "noteLabel")}</label>
         <textarea
@@ -2009,8 +2067,8 @@ export default function TheCornerApp() {
     };
   }, [session?.user?.id]);
 
-  const addEntry = async ({ type, duration, note }) => {
-    const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, duration, note, tags: [], hasVideo: false });
+  const addEntry = async ({ type, duration, note, blocks }) => {
+    const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, duration, note, blocks, tags: [], hasVideo: false });
     setEntries((prev) => [entry, ...prev]);
     setShowForm(false);
   };
@@ -2054,6 +2112,7 @@ export default function TheCornerApp() {
       type: p.title,
       duration: p.duration || "—",
       note: p.note,
+      blocks: p.blocks || [],
       tags: [],
       hasVideo: false,
       planKey,
