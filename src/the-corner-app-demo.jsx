@@ -72,8 +72,6 @@ const translations = {
   sparringOpponentLabel: { tr: "Rakip ağırlığı (opsiyonel)", en: "Opponent weight (optional)" },
   sparringOpponentPlaceholder: { tr: "örn. 75 kg", en: "e.g. 165 lbs" },
   pickCategoryError: { tr: "En az bir tür seç", en: "Pick at least one type" },
-  aiCoachSuggestionLabel: { tr: "Antrenman önerisi", en: "Training suggestion" },
-  nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
   streakStripLabel: { tr: "Bu haftaki seriyin", en: "Your streak this week" },
 
@@ -621,36 +619,6 @@ function getFighterProfile(style, school) {
   return { reference: null, focus: null, quote: null, drill: base.drill, matched: false };
 }
 
-function CoachTip({ profileInfo, lang }) {
-  const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
-
-  return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Award size={14} className="text-red-500" />
-        <span className="text-red-500 text-xs font-medium">{t(lang, "aiCoachSuggestionLabel")}</span>
-      </div>
-      <div className="mb-2">
-        <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "nextSessionLabel")}</p>
-        <p className="text-neutral-200 text-xs leading-relaxed">{fighter.drill}</p>
-      </div>
-      {fighter.reference && (
-        <div>
-          <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "referenceFighterLabel")}</p>
-          <p className="text-neutral-400 text-xs leading-relaxed">
-            {fighter.reference} — {fighter.focus} {lang === "en" ? "is worth studying" : "konusunda izlemeye değer"}
-          </p>
-          {fighter.quote && (
-            <p className="text-neutral-500 text-[11px] leading-relaxed mt-1.5 italic">
-              {fighter.quote} <span className="not-italic">— {fighter.reference}</span>
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StreakStrip({ entries, longestStreak, lang }) {
   const daySet = new Set(entries.map((e) => startOfDay(e.createdAt)));
   const monday = startOfWeek(Date.now());
@@ -682,7 +650,7 @@ function StreakStrip({ entries, longestStreak, lang }) {
   );
 }
 
-function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
+function JournalTab({ entries, onAddClick, lang }) {
   const { current: streak, longest: longestStreak } = computeStreaks(entries);
   const weekEntries = entries.filter((e) => e.createdAt >= startOfWeek(Date.now()));
 
@@ -700,7 +668,6 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
       <WeeklySummary entries={weekEntries} lang={lang} />
       <TrendChart entries={entries} lang={lang} />
       <CategoryChart entries={entries} lang={lang} />
-      <CoachTip profileInfo={profileInfo} lang={lang} />
 
       {entries.length > 0 && (
         <div className="flex flex-col gap-2.5 mb-4">
@@ -2530,7 +2497,7 @@ export default function TheCornerApp() {
         showForm ? (
           <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
         ) : (
-          <JournalTab userId={session.user.id} entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
+          <JournalTab entries={entries} onAddClick={() => setShowForm(true)} lang={lang} />
         )
       ) : tab === "coach" ? (
         <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
