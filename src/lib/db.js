@@ -108,6 +108,7 @@ export async function getCommunityPosts(userId) {
     timestamp: new Date(p.created_at).getTime(),
     text: p.text,
     stat: p.stat,
+    topic: p.topic || "Genel",
     likes: p.post_likes.length,
     comments: p.post_comments.length,
     liked: p.post_likes.some((l) => l.user_id === userId),
@@ -115,8 +116,10 @@ export async function getCommunityPosts(userId) {
   }));
 }
 
-export async function addCommunityPost(userId, { name, initials, text }) {
-  const { error } = await supabase.from("community_posts").insert({ user_id: userId, name, initials, text });
+export async function addCommunityPost(userId, { name, initials, text, stat, topic }) {
+  const { error } = await supabase
+    .from("community_posts")
+    .insert({ user_id: userId, name, initials, text, stat: stat || null, topic: topic || "Genel" });
   if (error) throw error;
 }
 

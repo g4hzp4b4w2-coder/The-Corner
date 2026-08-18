@@ -25,6 +25,7 @@ import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
+const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
 
 const translations = {
   navJournal: { tr: "Günlük", en: "Journal" },
@@ -46,6 +47,10 @@ const translations = {
   planGenerate: { tr: "Plan oluştur", en: "Generate plan" },
   editAnswersLabel: { tr: "Cevapları değiştir", en: "Edit answers" },
   shareLabel: { tr: "Paylaş", en: "Share" },
+  sharedLabel: { tr: "Paylaşıldı ✓", en: "Shared ✓" },
+  allTopicsLabel: { tr: "Tümü", en: "All" },
+  sortNewLabel: { tr: "Yeni", en: "New" },
+  sortPopularLabel: { tr: "Popüler", en: "Popular" },
   startLabel: { tr: "Başla", en: "Start" },
   resetLabel: { tr: "Verileri sıfırla", en: "Reset data" },
   signOutLabel: { tr: "Çıkış yap", en: "Sign out" },
@@ -279,6 +284,16 @@ const categoryTranslations = {
 };
 function tc(cat, lang) {
   return categoryTranslations[cat] ? categoryTranslations[cat][lang] || cat : cat;
+}
+
+const postTopicTranslations = {
+  Genel: { tr: "Genel", en: "General" },
+  Soru: { tr: "Soru", en: "Question" },
+  Başarı: { tr: "Başarı", en: "Achievement" },
+  Teknik: { tr: "Teknik", en: "Technique" },
+};
+function tp(topic, lang) {
+  return postTopicTranslations[topic] ? postTopicTranslations[topic][lang] || topic : topic;
 }
 
 const tagTranslations = {
@@ -984,6 +999,7 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
 
 function ComposeBox({ onSubmit, lang }) {
   const [text, setText] = useState("");
+  const [topic, setTopic] = useState("Genel");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
 
@@ -994,8 +1010,9 @@ function ComposeBox({ onSubmit, lang }) {
     }
     setPosting(true);
     try {
-      await onSubmit(text);
+      await onSubmit({ text, topic });
       setText("");
+      setTopic("Genel");
       setError("");
     } finally {
       setPosting(false);
@@ -1011,6 +1028,20 @@ function ComposeBox({ onSubmit, lang }) {
         rows={2}
         className="w-full bg-transparent text-neutral-200 text-sm placeholder-neutral-600 resize-none outline-none mb-2"
       />
+      <div className="flex gap-1.5 flex-wrap mb-2">
+        {POST_TOPICS.map((topicOption) => (
+          <button
+            key={topicOption}
+            type="button"
+            onClick={() => setTopic(topicOption)}
+            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
+              topic === topicOption ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-950 border-neutral-800 text-neutral-500"
+            }`}
+          >
+            {tp(topicOption, lang)}
+          </button>
+        ))}
+      </div>
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
       <div className="flex justify-end">
         <button
@@ -1178,6 +1209,13 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
   const [view, setView] = useState("feed");
   const [expandedId, setExpandedId] = useState(null);
   const [liveCounts, setLiveCounts] = useState({});
+  const [sortMode, setSortMode] = useState("new");
+  const [topicFilter, setTopicFilter] = useState("all");
+
+  const visiblePosts = posts
+    .filter((p) => topicFilter === "all" || p.topic === topicFilter)
+    .slice()
+    .sort((a, b) => (sortMode === "popular" ? b.likes - a.likes || b.timestamp - a.timestamp : b.timestamp - a.timestamp));
 
   return (
     <div className="px-5 pb-5">
@@ -1208,16 +1246,62 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
       ) : (
         <>
           <ComposeBox onSubmit={onPost} lang={lang} />
+
+          {posts.length > 0 && (
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setTopicFilter("all")}
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
+                    topicFilter === "all" ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                >
+                  {t(lang, "allTopicsLabel")}
+                </button>
+                {POST_TOPICS.map((topicOption) => (
+                  <button
+                    key={topicOption}
+                    onClick={() => setTopicFilter(topicOption)}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
+                      topicFilter === topicOption ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                    }`}
+                  >
+                    {tp(topicOption, lang)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 shrink-0">
+                <button
+                  onClick={() => setSortMode("new")}
+                  className={`text-[11px] px-2 py-1 rounded-md transition-colors ${
+                    sortMode === "new" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+                  }`}
+                >
+                  {t(lang, "sortNewLabel")}
+                </button>
+                <button
+                  onClick={() => setSortMode("popular")}
+                  className={`text-[11px] px-2 py-1 rounded-md transition-colors ${
+                    sortMode === "popular" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+                  }`}
+                >
+                  {t(lang, "sortPopularLabel")}
+                </button>
+              </div>
+            </div>
+          )}
+
           {posts.length === 0 ? (
             <p className="text-neutral-700 text-xs text-center py-6">
               {lang === "en" ? "No posts yet. Be the first to share something." : "Henüz gönderi yok. İlk paylaşımı sen yap."}
             </p>
+          ) : visiblePosts.length === 0 ? (
+            <p className="text-neutral-700 text-xs text-center py-6">
+              {lang === "en" ? "No posts in this topic yet." : "Bu konuda henüz gönderi yok."}
+            </p>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {posts
-                .slice()
-                .sort((a, b) => b.timestamp - a.timestamp)
-                .map((p) => (
+              {visiblePosts.map((p) => (
                   <div key={p.id} className={`bg-neutral-900 rounded-xl p-3 ${p.verified ? "border border-red-900" : "border border-neutral-800"}`}>
                     <div className="flex items-center gap-2 mb-2">
                       <div
@@ -1234,6 +1318,11 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
                         </span>
                       )}
                       <span className="text-neutral-600 text-xs">{timeAgo(p.timestamp, lang)}</span>
+                      {p.topic && p.topic !== "Genel" && (
+                        <span className="text-neutral-500 text-[10px] bg-neutral-950 border border-neutral-800 px-1.5 py-0.5 rounded">
+                          {tp(p.topic, lang)}
+                        </span>
+                      )}
                       {p.userId === currentUserId && (
                         <button
                           onClick={() => onDeletePost(p.id)}
@@ -1293,13 +1382,15 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
 const badgeList = [
   {
     id: "streak",
-    label: "9 gün seri",
+    label: { tr: "9 gün seri", en: "9-day streak" },
+    shareText: { tr: "🔥 9 günlük antrenman serimi tamamladım!", en: "🔥 Just hit a 9-day training streak!" },
     icon: Flame,
     check: (entries) => computeStreaks(entries).longest >= 9,
   },
   {
     id: "sparring",
-    label: "İlk sparring notu",
+    label: { tr: "İlk sparring notu", en: "First sparring note" },
+    shareText: { tr: "🥊 İlk sparring kaydımı günlüğe işledim!", en: "🥊 Logged my first sparring session!" },
     icon: Award,
     check: (entries) =>
       entries.some((e) => {
@@ -1309,13 +1400,21 @@ const badgeList = [
   },
   {
     id: "analiz",
-    label: "İlk AI analiz",
+    label: { tr: "İlk AI analiz", en: "First AI analysis" },
+    shareText: { tr: "🎥 AI koçuma ilk video analizimi yaptırdım!", en: "🎥 Got my first AI video analysis done!" },
     icon: Video,
     check: (entries) => entries.some((e) => e.hasVideo),
   },
 ];
 
-function BadgeGrid({ entries }) {
+function BadgeGrid({ entries, lang, onShare }) {
+  const [sharedIds, setSharedIds] = useState(() => new Set());
+
+  const share = (b) => {
+    onShare(b);
+    setSharedIds((prev) => new Set(prev).add(b.id));
+  };
+
   return (
     <div className="grid grid-cols-2 gap-2 mb-4">
       {badgeList.map((b) => {
@@ -1324,12 +1423,23 @@ function BadgeGrid({ entries }) {
         return (
           <div
             key={b.id}
-            className={`rounded-lg px-3 py-2.5 flex items-center gap-2 border ${
+            className={`rounded-lg px-3 py-2.5 flex flex-col gap-1 border ${
               earned ? "bg-red-950 border-red-900" : "bg-neutral-900 border-neutral-800"
             }`}
           >
-            <Icon size={16} className={earned ? "text-red-500" : "text-neutral-600"} />
-            <span className={`text-xs ${earned ? "text-red-400" : "text-neutral-600"}`}>{b.label}</span>
+            <div className="flex items-center gap-2">
+              <Icon size={16} className={earned ? "text-red-500" : "text-neutral-600"} />
+              <span className={`text-xs ${earned ? "text-red-400" : "text-neutral-600"}`}>{b.label[lang] || b.label.tr}</span>
+            </div>
+            {earned && onShare && (
+              <button
+                onClick={() => share(b)}
+                disabled={sharedIds.has(b.id)}
+                className="text-red-400 text-[10px] text-left hover:text-red-300 disabled:opacity-50 transition-colors"
+              >
+                {sharedIds.has(b.id) ? t(lang, "sharedLabel") : t(lang, "shareLabel")}
+              </button>
+            )}
           </div>
         );
       })}
@@ -1351,7 +1461,7 @@ function SkillBar({ skill, value }) {
   );
 }
 
-function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, loadError, lang }) {
+function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, onShareAchievement, loadError, lang }) {
   const [editing, setEditing] = useState(false);
   const skillData = CATEGORY_LIST.map((skill) => ({ skill, value: profileInfo.ratings[skill] ?? 50 }));
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
@@ -1452,7 +1562,7 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, l
       </div>
 
       <p className="text-neutral-500 text-xs mb-2">{t(lang, "badgesLabel")}</p>
-      <BadgeGrid entries={entries} />
+      <BadgeGrid entries={entries} lang={lang} onShare={onShareAchievement} />
 
       <p className="text-neutral-500 text-xs mb-1">{t(lang, "categoryLevelLabel")}</p>
       <p className="text-neutral-600 text-[11px] mb-2">{t(lang, "categoryLevelNote")}</p>
@@ -2323,12 +2433,16 @@ export default function TheCornerApp() {
     }
   };
 
-  const addPost = async (text) => {
+  const addPost = async ({ text, stat, topic }) => {
     const name = profileInfo?.displayName || "—";
     const initials = computeInitials(name);
-    await addCommunityPost(session.user.id, { name, initials, text });
+    await addCommunityPost(session.user.id, { name, initials, text, stat, topic });
     const refreshed = await getCommunityPosts(session.user.id);
     setPosts(refreshed);
+  };
+
+  const shareAchievement = async (badge) => {
+    await addPost({ text: badge.shareText[lang] || badge.shareText.tr, stat: badge.label[lang] || badge.label.tr, topic: "Başarı" });
   };
 
   const deletePost = async (id) => {
@@ -2491,6 +2605,7 @@ export default function TheCornerApp() {
           onReset={resetData}
           onSignOut={signOut}
           onSaveProfile={completeOnboarding}
+          onShareAchievement={shareAchievement}
           loadError={loadError}
           lang={lang}
         />
