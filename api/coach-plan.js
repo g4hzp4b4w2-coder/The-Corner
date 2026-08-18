@@ -1,5 +1,6 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
+import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 const MODEL = "claude-sonnet-5";
 const DAY_CODES = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
@@ -9,7 +10,7 @@ const INTENSITY_LABEL = {
   fight: { tr: "Maça hazırlık", en: "Fight prep" },
 };
 
-function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang }) {
+function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang, knowledgeLine }) {
   const profileLine = [
     profile?.displayName && `İsim: ${profile.displayName}`,
     profile?.years && `Deneyim: ${profile.years}`,
@@ -73,7 +74,7 @@ Rules:
 - ${EXPERTISE_NOTE.en}
 - ${ADDRESS_NOTE.en}
 - Keep "title" short (2-4 words), "blocks" to 2-4 short bullet items, "note" to one short encouraging/practical sentence.
-- All text must be in English.`;
+- All text must be in English.${knowledgeLine || ""}`;
   }
 
   return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun, kişiselleştirilmiş bir haftalık antrenman planı oluşturuyorsun. Aşağıdaki kullanıcı cevaplarını, profilini, antrenman günlüğünü ve son koç sohbetini harmanla — sadece cevapları şablona koyma, seansların içeriğini gerçekten bu boksöre göre uyarla.
@@ -105,7 +106,7 @@ Kurallar:
 - ${EXPERTISE_NOTE.tr}
 - ${ADDRESS_NOTE.tr}
 - "title" kısa olsun (2-4 kelime), "blocks" 2-4 kısa madde olsun, "note" tek kısa, pratik/motive edici bir cümle olsun.
-- Tüm metinler Türkçe olmalı.`;
+- Tüm metinler Türkçe olmalı.${knowledgeLine || ""}`;
 }
 
 function isValidPlan(plan, days) {
@@ -149,6 +150,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    const knowledge = await getRecentKnowledge(lang);
+    const knowledgeLine = buildKnowledgeLine(knowledge, lang);
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -159,7 +162,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 1600,
-        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang }),
+        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang, knowledgeLine }),
         messages: [
           {
             role: "user",
