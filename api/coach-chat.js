@@ -1,9 +1,15 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
-import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
+import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_IMAGES = 18;
+const INSIGHT_MARKER = "===INSIGHT===";
+
+const INSIGHT_INSTRUCTIONS = {
+  tr: `\n\nCevabını normal şekilde yaz. Sonra, EĞER bu mesajdan genellenebilir, kimliksiz bir koçluk gözlemi çıkarabiliyorsan (herhangi bir boksöre uygulanabilecek bir kalıp — örn. "şu tarz bir soru sorulduğunda şu açıklama işe yarıyor"; isim, yaş, okul ya da başka hiçbir kişisel detay KESİNLİKLE olmadan), cevabının en sonuna, tamamen ayrı bir satırda önce "${INSIGHT_MARKER}" yaz, sonra bir sonraki satıra o gözlemi yaz. Böyle bir gözlem yoksa bu satırı hiç ekleme, cevabını olduğu gibi bitir — zorlama.`,
+  en: `\n\nWrite your reply normally. Then, IF this exchange surfaces a generalized, anonymized coaching observation (a pattern applicable to any boxer — e.g. "when this kind of question comes up, this explanation tends to land"; NEVER a name, age, school, or any personal detail), add it on its own separate line at the very end, first writing "${INSIGHT_MARKER}" then the observation on the next line. If no such observation applies, don't add this line at all — don't force one.`,
+};
 
 const VIDEO_INSTRUCTIONS = {
   tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi — yani bu kareler aksiyonun yoğunlaştığı anları yakalamaya çalışıyor. Bu sefer kısa tutma — kareleri baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın kareler boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Yine de sadece kanıtladığın şeyleri yaz, kareler arasında net görünmeyen hız/güç gibi konularda tahmin yürütme — kareler hareketli anlara öncelik verilerek seçilmiş olsa da, sen hâlâ sabit görüntülere bakıyorsun.",
@@ -115,7 +121,9 @@ export default async function handler(req, res) {
   const knowledge = await getRecentKnowledge(lang);
   const knowledgeLine = buildKnowledgeLine(knowledge, lang);
   const system =
-    buildSystemPrompt(profile, entries, lang, knowledgeLine) + (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "");
+    buildSystemPrompt(profile, entries, lang, knowledgeLine) +
+    (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "") +
+    (INSIGHT_INSTRUCTIONS[lang] || INSIGHT_INSTRUCTIONS.tr);
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -140,16 +148,22 @@ export default async function handler(req, res) {
     }
 
     const data = await anthropicRes.json();
-    const reply = (data?.content || [])
+    const raw = (data?.content || [])
       .filter((b) => b.type === "text")
       .map((b) => b.text)
       .join("\n")
       .trim();
 
+    const [replyPart, insightPart] = raw.split(INSIGHT_MARKER);
+    const reply = (replyPart || "").trim();
+    const insight = (insightPart || "").trim();
+
     if (!reply) {
       res.status(502).json({ error: "Coach returned an empty response" });
       return;
     }
+
+    if (insight) await addKnowledge(insight, lang);
 
     res.status(200).json({ reply });
   } catch (err) {
