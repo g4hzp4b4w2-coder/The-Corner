@@ -622,15 +622,12 @@ function getFighterProfile(style, school) {
   return { reference: null, focus: null, quote: null, drill: base.drill, matched: false };
 }
 
-const TIP_CACHE_TTL = 24 * 60 * 60 * 1000;
-
 function loadCachedTip(userId, lang) {
   try {
     const raw = localStorage.getItem(`corner_coach_tip_${userId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed.lang !== lang) return null;
-    if (!parsed.fetchedAt || Date.now() - parsed.fetchedAt > TIP_CACHE_TTL) return null;
     return parsed;
   } catch (e) {
     return null;
