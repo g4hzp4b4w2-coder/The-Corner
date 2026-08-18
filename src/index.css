@@ -4,3 +4,14 @@
 body {
   margin: 0;
 }
+
+@keyframes glove-punch {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  45% { transform: translateX(10px) rotate(-10deg); }
+  60% { transform: translateX(-2px) rotate(2deg); }
+}
+
+.glove-punch {
+  animation: glove-punch 0.9s ease-in-out infinite;
+  transform-origin: 70% 60%;
+}
