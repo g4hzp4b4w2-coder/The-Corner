@@ -228,16 +228,6 @@ function tc(cat, lang) {
   return categoryTranslations[cat] ? categoryTranslations[cat][lang] || cat : cat;
 }
 
-const sessionTypeTranslations = {
-  Shadowbox: { tr: "Shadowbox", en: "Shadowboxing" },
-  "Pad çalışması": { tr: "Pad çalışması", en: "Pad work" },
-  "Teknik antrenman": { tr: "Teknik antrenman", en: "Technical training" },
-  Sparring: { tr: "Sparring", en: "Sparring" },
-};
-function ts(type, lang) {
-  return sessionTypeTranslations[type] ? sessionTypeTranslations[type][lang] || type : type;
-}
-
 const tagTranslations = {
   "sol el düşük": { tr: "sol el düşük", en: "low lead hand" },
   "bel dönüşü": { tr: "bel dönüşü", en: "hip rotation" },
@@ -604,7 +594,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
             <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-neutral-100 text-sm font-medium">
-                  {e.label} · {ts(e.type, lang)}
+                  {e.label} · {tc(e.type, lang)}
                 </span>
                 <span className="text-neutral-500 text-xs">{e.duration}</span>
               </div>
@@ -661,7 +651,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
 }
 
 function NewEntryForm({ onSubmit, onCancel, lang }) {
-  const [type, setType] = useState("Shadowbox");
+  const [type, setType] = useState(CATEGORY_LIST[0]);
   const [duration, setDuration] = useState("");
   const [note, setNote] = useState("");
   const [blocks, setBlocks] = useState([]);
@@ -707,10 +697,11 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
           onChange={(e) => setType(e.target.value)}
           className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-3"
         >
-          <option value="Shadowbox">{ts("Shadowbox", lang)}</option>
-          <option value="Pad çalışması">{ts("Pad çalışması", lang)}</option>
-          <option value="Teknik antrenman">{ts("Teknik antrenman", lang)}</option>
-          <option value="Sparring">{ts("Sparring", lang)}</option>
+          {CATEGORY_LIST.map((c) => (
+            <option key={c} value={c}>
+              {tc(c, lang)}
+            </option>
+          ))}
         </select>
 
         <label className="text-neutral-500 text-xs block mb-1">{t(lang, "durationLabel")}</label>
@@ -1096,7 +1087,11 @@ const badgeList = [
     id: "sparring",
     label: "İlk sparring notu",
     icon: Award,
-    check: (entries) => entries.some((e) => e.type === "Sparring"),
+    check: (entries) =>
+      entries.some((e) => {
+        const haystack = [e.type, e.note, ...(e.blocks || [])].join(" ").toLowerCase();
+        return haystack.includes("sparring");
+      }),
   },
   {
     id: "analiz",
