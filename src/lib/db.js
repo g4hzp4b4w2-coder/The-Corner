@@ -46,6 +46,7 @@ function rowToEntry(row) {
     note: row.note,
     tags: row.tags || [],
     blocks: row.blocks || [],
+    categories: row.categories || [],
     hasVideo: row.has_video,
     planKey: row.plan_key,
     createdAt: new Date(row.created_at).getTime(),
@@ -73,6 +74,7 @@ export async function addJournalEntry(userId, entry) {
       note: entry.note,
       tags: entry.tags || [],
       blocks: entry.blocks || [],
+      categories: entry.categories || [],
       has_video: entry.hasVideo || false,
       plan_key: entry.planKey || null,
     })

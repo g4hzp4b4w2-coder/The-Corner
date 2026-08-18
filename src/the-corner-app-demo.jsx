@@ -66,6 +66,7 @@ const translations = {
   sparringDraw: { tr: "Berabere", en: "Draw" },
   sparringOpponentLabel: { tr: "Rakip ağırlığı (opsiyonel)", en: "Opponent weight (optional)" },
   sparringOpponentPlaceholder: { tr: "örn. 75 kg", en: "e.g. 165 lbs" },
+  pickCategoryError: { tr: "En az bir tür seç", en: "Pick at least one type" },
   aiCoachSuggestionLabel: { tr: "AI koç önerisi", en: "AI coach suggestion" },
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
@@ -236,8 +237,11 @@ function computeCategoryDistribution(entries, days = 28) {
   let other = 0;
   entries.forEach((e) => {
     if (e.createdAt < cutoff) return;
-    if (counts[e.type] !== undefined) counts[e.type] += 1;
-    else other += 1;
+    const cats = e.categories?.length ? e.categories : [e.type];
+    cats.forEach((c) => {
+      if (counts[c] !== undefined) counts[c] += 1;
+      else other += 1;
+    });
   });
   const result = CATEGORY_LIST.map((c) => ({ key: c, count: counts[c] }));
   if (other > 0) result.push({ key: "Diğer", count: other });
@@ -734,7 +738,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
             <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-neutral-100 text-sm font-medium">
-                  {e.label} · {tc(e.type, lang)}
+                  {e.label} · {(e.categories?.length ? e.categories : [e.type]).map((c) => tc(c, lang)).join(" + ")}
                 </span>
                 <span className="text-neutral-500 text-xs">{e.duration}</span>
               </div>
@@ -791,7 +795,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
 }
 
 function NewEntryForm({ onSubmit, onCancel, lang }) {
-  const [type, setType] = useState(CATEGORY_LIST[0]);
+  const [categories, setCategories] = useState([CATEGORY_LIST[0]]);
   const [duration, setDuration] = useState("");
   const [note, setNote] = useState("");
   const [blocks, setBlocks] = useState([]);
@@ -812,6 +816,10 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
 
   const removeBlock = (i) => setBlocks((prev) => prev.filter((_, idx) => idx !== i));
 
+  const toggleCategory = (c) => {
+    setCategories((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  };
+
   const submit = async () => {
     const sparringBlocks = [];
     if (isSparring) {
@@ -821,13 +829,17 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
     }
     const finalBlocks = [...sparringBlocks, ...blocks];
 
+    if (categories.length === 0) {
+      setError(t(lang, "pickCategoryError"));
+      return;
+    }
     if (!duration.trim() || (!note.trim() && finalBlocks.length === 0)) {
       setError(t(lang, "fillDurationNoteError"));
       return;
     }
     setSaving(true);
     try {
-      await onSubmit({ type, duration: `${duration} dk`, note, blocks: finalBlocks });
+      await onSubmit({ type: categories[0], categories, duration: `${duration} dk`, note, blocks: finalBlocks });
     } finally {
       setSaving(false);
     }
@@ -844,17 +856,20 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
         </div>
 
         <label className="text-neutral-500 text-xs block mb-1">{t(lang, "typeLabel")}</label>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-3"
-        >
+        <div className="flex gap-1.5 flex-wrap mb-3">
           {CATEGORY_LIST.map((c) => (
-            <option key={c} value={c}>
+            <button
+              key={c}
+              type="button"
+              onClick={() => toggleCategory(c)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                categories.includes(c) ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-950 border-neutral-800 text-neutral-500"
+              }`}
+            >
               {tc(c, lang)}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
 
         <label className="text-neutral-500 text-xs block mb-1">{t(lang, "durationLabel")}</label>
         <input
@@ -2276,8 +2291,8 @@ export default function TheCornerApp() {
     };
   }, [session?.user?.id]);
 
-  const addEntry = async ({ type, duration, note, blocks }) => {
-    const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, duration, note, blocks, tags: [], hasVideo: false });
+  const addEntry = async ({ type, categories, duration, note, blocks }) => {
+    const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, categories, duration, note, blocks, tags: [], hasVideo: false });
     setEntries((prev) => [entry, ...prev]);
     setShowForm(false);
   };
