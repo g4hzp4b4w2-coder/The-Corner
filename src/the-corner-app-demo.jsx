@@ -19,7 +19,7 @@ import {
   getChatMessages,
   resetChatMessages,
 } from "./lib/db";
-import { getJournalTip, getWeeklyPlan } from "./lib/coach";
+import { getWeeklyPlan } from "./lib/coach";
 import { getMatchNews } from "./lib/matchNews";
 import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
@@ -51,7 +51,6 @@ const translations = {
   allTopicsLabel: { tr: "Tümü", en: "All" },
   sortNewLabel: { tr: "Yeni", en: "New" },
   sortPopularLabel: { tr: "Popüler", en: "Popular" },
-  refreshLabel: { tr: "Yenile", en: "Refresh" },
   startLabel: { tr: "Başla", en: "Start" },
   resetLabel: { tr: "Verileri sıfırla", en: "Reset data" },
   signOutLabel: { tr: "Çıkış yap", en: "Sign out" },
@@ -73,7 +72,7 @@ const translations = {
   sparringOpponentLabel: { tr: "Rakip ağırlığı (opsiyonel)", en: "Opponent weight (optional)" },
   sparringOpponentPlaceholder: { tr: "örn. 75 kg", en: "e.g. 165 lbs" },
   pickCategoryError: { tr: "En az bir tür seç", en: "Pick at least one type" },
-  aiCoachSuggestionLabel: { tr: "AI koç önerisi", en: "AI coach suggestion" },
+  aiCoachSuggestionLabel: { tr: "Antrenman önerisi", en: "Training suggestion" },
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
   streakStripLabel: { tr: "Bu haftaki seriyin", en: "Your streak this week" },
@@ -622,109 +621,18 @@ function getFighterProfile(style, school) {
   return { reference: null, focus: null, quote: null, drill: base.drill, matched: false };
 }
 
-function loadCachedTip(userId, lang) {
-  try {
-    const raw = localStorage.getItem(`corner_coach_tip_${userId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed.lang !== lang) return null;
-    return parsed;
-  } catch (e) {
-    return null;
-  }
-}
-
-function saveCachedTip(userId, lang, tip) {
-  try {
-    localStorage.setItem(`corner_coach_tip_${userId}`, JSON.stringify({ ...tip, lang, fetchedAt: Date.now() }));
-  } catch (e) {
-    // ignore storage errors (private mode, quota, etc.) — just means it won't be cached
-  }
-}
-
-function CoachTip({ userId, entries, profileInfo, lang }) {
+function CoachTip({ profileInfo, lang }) {
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
-  const [tip, setTip] = useState(null);
-  const [tipError, setTipError] = useState(false);
-  const [tipLoading, setTipLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const cached = refreshKey === 0 ? loadCachedTip(userId, lang) : null;
-    if (cached) {
-      setTip(cached);
-      setTipError(false);
-      setTipLoading(false);
-      return;
-    }
-
-    setTipLoading(true);
-    setTipError(false);
-    (async () => {
-      let recentChat = [];
-      try {
-        recentChat = await getChatMessages(userId);
-      } catch (e) {
-        // proceed without chat context
-      }
-      try {
-        const res = await getJournalTip({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), lang });
-        // Cache regardless of whether this component is still mounted — the
-        // request already happened, so the result shouldn't be thrown away
-        // just because the user navigated off the tab before it resolved.
-        saveCachedTip(userId, lang, res);
-        if (!cancelled) {
-          setTip(res);
-        }
-      } catch (e) {
-        if (!cancelled) setTipError(true);
-      } finally {
-        if (!cancelled) setTipLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, profileInfo.style, profileInfo.school, lang, refreshKey]);
-
-  const drill = tip?.drill || fighter.drill;
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5">
-          <Award size={14} className="text-red-500" />
-          <span className="text-red-500 text-xs font-medium">{t(lang, "aiCoachSuggestionLabel")}</span>
-        </div>
-        <button
-          onClick={() => setRefreshKey((k) => k + 1)}
-          disabled={tipLoading}
-          aria-label={t(lang, "refreshLabel")}
-          className="text-neutral-600 hover:text-neutral-300 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw size={12} className={tipLoading ? "animate-spin" : ""} />
-        </button>
+      <div className="flex items-center gap-1.5 mb-2">
+        <Award size={14} className="text-red-500" />
+        <span className="text-red-500 text-xs font-medium">{t(lang, "aiCoachSuggestionLabel")}</span>
       </div>
       <div className="mb-2">
         <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "nextSessionLabel")}</p>
-        {tipLoading ? (
-          <div className="flex justify-start">
-            <BoxingGloveLoader size={22} compact />
-          </div>
-        ) : (
-          <>
-            {tip?.note && <p className="text-neutral-300 text-xs leading-relaxed mb-1">{tip.note}</p>}
-            <p className="text-neutral-200 text-xs leading-relaxed">{drill}</p>
-            {tipError && (
-              <p className="text-neutral-600 text-[10px] mt-1">
-                {lang === "en" ? "Showing a general tip — AI suggestion unavailable right now." : "Genel bir öneri gösteriliyor — AI önerisi şu an alınamadı."}
-              </p>
-            )}
-          </>
-        )}
+        <p className="text-neutral-200 text-xs leading-relaxed">{fighter.drill}</p>
       </div>
       {fighter.reference && (
         <div>
@@ -792,7 +700,7 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
       <WeeklySummary entries={weekEntries} lang={lang} />
       <TrendChart entries={entries} lang={lang} />
       <CategoryChart entries={entries} lang={lang} />
-      <CoachTip userId={userId} entries={entries} profileInfo={profileInfo} lang={lang} />
+      <CoachTip profileInfo={profileInfo} lang={lang} />
 
       {entries.length > 0 && (
         <div className="flex flex-col gap-2.5 mb-4">

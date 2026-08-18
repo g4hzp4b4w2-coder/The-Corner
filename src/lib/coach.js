@@ -20,10 +20,6 @@ async function callApi(path, payload) {
   return res.json();
 }
 
-export function getJournalTip({ profile, entries, recentChat, lang }) {
-  return callApi("/api/coach", { mode: "journal-tip", profile, entries, recentChat, lang });
-}
-
 export function getChatReply({ messages, images, caption, profile, entries, lang }) {
   return callApi("/api/coach-chat", { messages, images, caption, profile, entries, lang });
 }
