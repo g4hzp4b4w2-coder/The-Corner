@@ -671,9 +671,12 @@ function CoachTip({ userId, entries, profileInfo, lang }) {
       }
       try {
         const res = await getJournalTip({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), lang });
+        // Cache regardless of whether this component is still mounted — the
+        // request already happened, so the result shouldn't be thrown away
+        // just because the user navigated off the tab before it resolved.
+        saveCachedTip(userId, lang, res);
         if (!cancelled) {
           setTip(res);
-          saveCachedTip(userId, lang, res);
         }
       } catch (e) {
         if (!cancelled) setTipError(true);
