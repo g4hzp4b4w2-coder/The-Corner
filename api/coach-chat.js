@@ -1,5 +1,6 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
+import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_IMAGES = 18;
@@ -9,7 +10,7 @@ const VIDEO_INSTRUCTIONS = {
   en: "\n\nThis message includes multiple sequential frames from the user's video. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes), so these frames are trying to capture the action-heavy moments. Don't keep it short this time — go through the frames and write a longer, structured analysis: (1) how stance and guard change across the frames, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. Still only state what the frames actually show — don't guess at things like speed or power that aren't visible across stills, even though the frames were chosen to favor motion, you're still looking at static images.",
 };
 
-function buildSystemPrompt(profile, entries, lang) {
+function buildSystemPrompt(profile, entries, lang, knowledgeLine) {
   const profileLine = [
     profile?.displayName && `Name: ${profile.displayName}`,
     profile?.years && `Deneyim: ${profile.years}`,
@@ -43,7 +44,7 @@ Sometimes a message includes a few still frames extracted from the user's own tr
 Boxer profile: ${profileLine || "(not provided)"}
 
 Recent training log entries:
-${entriesLines || "(no entries yet)"}`;
+${entriesLines || "(no entries yet)"}${knowledgeLine || ""}`;
   }
 
   return `Sen "The Corner" adlı bir boks antrenman uygulamasındaki AI koçsun. Boksörle doğrudan sohbet ediyorsun. Sıcak, spesifik ve pratik ol — gerçek bir köşe koçu gibi. Cevapların kısa olsun (2-5 cümle), gerektiğinde profiline ve antrenman günlüğüne referans ver, önerilerin şu ana kadarki tüm sohbete göre evrilsin, sadece son mesaja değil. Bir noktayı güçlendirecekse gerçek, bilinen boksörlerin belgelenmiş antrenman yöntemlerine, tekniklerine ve stillerine referans ver (örn. önerdiğin şeye yaklaşımı benzeyen bir boksörün adını anmak gibi) — emin olmadığın detayları uydurma, emin değilsen bunu söyle. Markdown biçimlendirmesi kullanma, sade konuşma dili kullan.
@@ -61,7 +62,7 @@ Bazen bir mesaj, kullanıcının kendi antrenman videosundan alınmış birkaç 
 Boksör profili: ${profileLine || "(belirtilmedi)"}
 
 Son antrenman günlüğü notları:
-${entriesLines || "(henüz kayıt yok)"}`;
+${entriesLines || "(henüz kayıt yok)"}${knowledgeLine || ""}`;
 }
 
 export default async function handler(req, res) {
@@ -111,7 +112,10 @@ export default async function handler(req, res) {
   }
 
   const anthropicMessages = [...priorMessages, { role: last.role, content: lastContent }];
-  const system = buildSystemPrompt(profile, entries, lang) + (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "");
+  const knowledge = await getRecentKnowledge(lang);
+  const knowledgeLine = buildKnowledgeLine(knowledge, lang);
+  const system =
+    buildSystemPrompt(profile, entries, lang, knowledgeLine) + (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "");
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
