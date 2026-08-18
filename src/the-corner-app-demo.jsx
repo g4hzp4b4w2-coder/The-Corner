@@ -21,7 +21,7 @@ import {
 } from "./lib/db";
 import { getJournalTip, getWeeklyPlan } from "./lib/coach";
 import { getMatchNews } from "./lib/matchNews";
-import AuthScreen from "./AuthScreen";
+import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
@@ -2018,11 +2018,13 @@ export default function TheCornerApp() {
   const [dataLoading, setDataLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [lang, setLang] = useState("tr");
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
       setSession(newSession);
       if (!newSession) {
         setProfileInfo(null);
@@ -2165,6 +2167,17 @@ export default function TheCornerApp() {
                 : "Bu uygulamanın bağlı bir Supabase projesine ihtiyacı var. Deploy ayarlarına VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY değişkenlerini ekleyip yeniden deploy et."}
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (passwordRecovery) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
+        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
+          <Header lang={lang} onToggleLang={toggleLang} />
+          <ResetPasswordForm lang={lang} onDone={() => setPasswordRecovery(false)} />
         </div>
       </div>
     );
