@@ -301,6 +301,36 @@ function CornerMark({ width = 30, height = 17 }) {
   );
 }
 
+function BoxingGloveLoader({ size = 40, label, compact = false }) {
+  return (
+    <div className={`flex flex-col items-center justify-center gap-2 ${compact ? "py-1" : "py-6"}`}>
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className="glove-punch" role="img" aria-label="Yükleniyor">
+        <rect x="13" y="38" width="30" height="18" rx="7" fill="#b91c1c" stroke="#7f1d1d" strokeWidth="1.5" />
+        <line x1="19" y1="45" x2="37" y2="45" stroke="#7f1d1d" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="19" y1="50" x2="37" y2="50" stroke="#7f1d1d" strokeWidth="1.5" strokeLinecap="round" />
+        <ellipse cx="26" cy="24" rx="17" ry="15" fill="#dc2626" stroke="#7f1d1d" strokeWidth="1.5" />
+        <ellipse cx="40" cy="23" rx="8.5" ry="10" fill="#dc2626" stroke="#7f1d1d" strokeWidth="1.5" transform="rotate(-15 40 23)" />
+      </svg>
+      {label && <p className="text-neutral-600 text-xs">{label}</p>}
+    </div>
+  );
+}
+
+function AppShell({ lang, onToggleLang, footer, children }) {
+  return (
+    <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
+      <div
+        className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col"
+        style={{ height: "min(640px, 92vh)" }}
+      >
+        <Header lang={lang} onToggleLang={onToggleLang} />
+        <div className="flex-1 overflow-y-auto flex flex-col">{children}</div>
+        {footer}
+      </div>
+    </div>
+  );
+}
+
 function Header({ lang, onToggleLang }) {
   return (
     <div className="relative px-5 pt-6 pb-4 overflow-hidden">
@@ -605,7 +635,9 @@ function CoachTip({ userId, entries, profileInfo, lang }) {
       <div className="mb-2">
         <p className="text-neutral-500 text-[11px] mb-0.5">{t(lang, "nextSessionLabel")}</p>
         {tipLoading ? (
-          <p className="text-neutral-600 text-xs leading-relaxed animate-pulse">{t(lang, "loadingLabel")}</p>
+          <div className="flex justify-start">
+            <BoxingGloveLoader size={22} compact />
+          </div>
         ) : (
           <>
             {tip?.note && <p className="text-neutral-300 text-xs leading-relaxed mb-1">{tip.note}</p>}
@@ -1887,7 +1919,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
             )}
 
             {planLoading ? (
-              <p className="text-neutral-600 text-xs text-center py-8 animate-pulse">{t(lang, "loadingLabel")}</p>
+              <BoxingGloveLoader size={34} label={t(lang, "loadingLabel")} />
             ) : (
             <div className="flex flex-col gap-2">
               {plan.map((p, i) => (
@@ -2265,113 +2297,60 @@ export default function TheCornerApp() {
 
   if (!isSupabaseConfigured) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
-          <Header lang={lang} onToggleLang={toggleLang} />
-          <div className="px-5 py-10 flex-1 flex flex-col justify-center text-center">
-            <p className="text-neutral-100 text-base font-medium mb-2">
-              {lang === "en" ? "Setup not finished yet" : "Kurulum henüz tamamlanmadı"}
-            </p>
-            <p className="text-neutral-500 text-xs leading-relaxed">
-              {lang === "en"
-                ? "This app needs a Supabase project connected. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment settings, then redeploy."
-                : "Bu uygulamanın bağlı bir Supabase projesine ihtiyacı var. Deploy ayarlarına VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY değişkenlerini ekleyip yeniden deploy et."}
-            </p>
-          </div>
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <div className="px-5 py-10 flex-1 flex flex-col justify-center text-center">
+          <p className="text-neutral-100 text-base font-medium mb-2">
+            {lang === "en" ? "Setup not finished yet" : "Kurulum henüz tamamlanmadı"}
+          </p>
+          <p className="text-neutral-500 text-xs leading-relaxed">
+            {lang === "en"
+              ? "This app needs a Supabase project connected. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment settings, then redeploy."
+              : "Bu uygulamanın bağlı bir Supabase projesine ihtiyacı var. Deploy ayarlarına VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY değişkenlerini ekleyip yeniden deploy et."}
+          </p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (passwordRecovery) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
-          <Header lang={lang} onToggleLang={toggleLang} />
-          <ResetPasswordForm lang={lang} onDone={() => setPasswordRecovery(false)} />
-        </div>
-      </div>
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <ResetPasswordForm lang={lang} onDone={() => setPasswordRecovery(false)} />
+      </AppShell>
     );
   }
 
   if (session === undefined || (session && dataLoading)) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-        <div className="w-full max-w-sm flex items-center justify-center" style={{ minHeight: 640 }}>
-          <p className="text-neutral-600 text-sm">{t(lang, "loadingLabel")}</p>
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <div className="flex-1 flex items-center justify-center">
+          <BoxingGloveLoader size={48} label={t(lang, "loadingLabel")} />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
-          <Header lang={lang} onToggleLang={toggleLang} />
-          <AuthScreen lang={lang} />
-        </div>
-      </div>
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <AuthScreen lang={lang} />
+      </AppShell>
     );
   }
 
   if (!profileInfo) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-        <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
-          <Header lang={lang} onToggleLang={toggleLang} />
-          <OnboardingForm onComplete={completeOnboarding} lang={lang} />
-        </div>
-      </div>
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <OnboardingForm onComplete={completeOnboarding} lang={lang} />
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
-      <div className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col" style={{ minHeight: 640 }}>
-        <Header lang={lang} onToggleLang={toggleLang} />
-
-        <div className="flex-1 overflow-y-auto">
-          {tab === "journal" ? (
-            showForm ? (
-              <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
-            ) : (
-              <JournalTab userId={session.user.id} entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
-            )
-          ) : tab === "coach" ? (
-            <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} />
-          ) : tab === "calendar" ? (
-            <CalendarTab
-              onMarkDone={addPlanEntry}
-              onUnmarkDone={removePlanEntry}
-              lang={lang}
-              userId={session.user.id}
-              profileInfo={profileInfo}
-              entries={entries}
-            />
-          ) : tab === "community" ? (
-            <CommunityTab
-              posts={posts}
-              onLike={toggleLike}
-              onPost={addPost}
-              onDeletePost={deletePost}
-              currentUserId={session.user.id}
-              displayName={profileInfo.displayName}
-              lang={lang}
-            />
-          ) : (
-            <ProfileTab
-              entries={entries}
-              profileInfo={profileInfo}
-              onReset={resetData}
-              onSignOut={signOut}
-              onSaveProfile={completeOnboarding}
-              loadError={loadError}
-              lang={lang}
-            />
-          )}
-        </div>
-
+    <AppShell
+      lang={lang}
+      onToggleLang={toggleLang}
+      footer={
         <div className="flex border-t border-neutral-800">
           <NavButton active={tab === "journal"} icon={CalendarDays} label={t(lang, "navJournal")} onClick={() => setTab("journal")} />
           <NavButton active={tab === "coach"} icon={Sparkles} label={t(lang, "navCoach")} onClick={() => setTab("coach")} />
@@ -2379,7 +2358,46 @@ export default function TheCornerApp() {
           <NavButton active={tab === "community"} icon={Users} label={t(lang, "navCommunity")} onClick={() => setTab("community")} />
           <NavButton active={tab === "profile"} icon={User} label={t(lang, "navProfile")} onClick={() => setTab("profile")} />
         </div>
-      </div>
-    </div>
+      }
+    >
+      {tab === "journal" ? (
+        showForm ? (
+          <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
+        ) : (
+          <JournalTab userId={session.user.id} entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
+        )
+      ) : tab === "coach" ? (
+        <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} />
+      ) : tab === "calendar" ? (
+        <CalendarTab
+          onMarkDone={addPlanEntry}
+          onUnmarkDone={removePlanEntry}
+          lang={lang}
+          userId={session.user.id}
+          profileInfo={profileInfo}
+          entries={entries}
+        />
+      ) : tab === "community" ? (
+        <CommunityTab
+          posts={posts}
+          onLike={toggleLike}
+          onPost={addPost}
+          onDeletePost={deletePost}
+          currentUserId={session.user.id}
+          displayName={profileInfo.displayName}
+          lang={lang}
+        />
+      ) : (
+        <ProfileTab
+          entries={entries}
+          profileInfo={profileInfo}
+          onReset={resetData}
+          onSignOut={signOut}
+          onSaveProfile={completeOnboarding}
+          loadError={loadError}
+          lang={lang}
+        />
+      )}
+    </AppShell>
   );
 }
