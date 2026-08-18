@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send } from "lucide-react";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
   getProfile,
@@ -53,6 +53,9 @@ const translations = {
 
   // Weekly summary / coach tip / streak
   weeklySummaryLabel: { tr: "Haftalık özet", en: "Weekly summary" },
+  trendChartTitle: { tr: "Son 8 hafta", en: "Last 8 weeks" },
+  categoryChartTitle: { tr: "Son 4 hafta · kategori dağılımı", en: "Last 4 weeks · category breakdown" },
+  chartEmptyState: { tr: "Henüz gösterecek veri yok, birkaç seans kaydet.", en: "Not enough data yet — log a few sessions." },
   aiCoachSuggestionLabel: { tr: "AI koç önerisi", en: "AI coach suggestion" },
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
@@ -216,6 +219,41 @@ function computeStreaks(entries) {
   return { current, longest };
 }
 
+function computeCategoryDistribution(entries, days = 28) {
+  const cutoff = Date.now() - days * DAY_MS;
+  const counts = {};
+  CATEGORY_LIST.forEach((c) => (counts[c] = 0));
+  let other = 0;
+  entries.forEach((e) => {
+    if (e.createdAt < cutoff) return;
+    if (counts[e.type] !== undefined) counts[e.type] += 1;
+    else other += 1;
+  });
+  const result = CATEGORY_LIST.map((c) => ({ key: c, count: counts[c] }));
+  if (other > 0) result.push({ key: "Diğer", count: other });
+  return result;
+}
+
+const monthsTr = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+const monthsEn = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatShortDate(ts, lang) {
+  const d = new Date(ts);
+  const months = lang === "en" ? monthsEn : monthsTr;
+  return `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+function computeWeeklyTrend(entries, weeks, lang) {
+  const thisWeekStart = startOfWeek(Date.now());
+  const buckets = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const weekStart = thisWeekStart - i * 7 * DAY_MS;
+    const weekEnd = weekStart + 7 * DAY_MS;
+    const count = entries.filter((e) => e.createdAt >= weekStart && e.createdAt < weekEnd).length;
+    buckets.push({ label: formatShortDate(weekStart, lang), count });
+  }
+  return buckets;
+}
+
 const categoryTranslations = {
   Güç: { tr: "Güç", en: "Power" },
   Defans: { tr: "Defans", en: "Defense" },
@@ -223,6 +261,7 @@ const categoryTranslations = {
   "Fight IQ": { tr: "Fight IQ", en: "Fight IQ" },
   Hız: { tr: "Hız", en: "Speed" },
   "Ayak işi": { tr: "Ayak işi", en: "Footwork" },
+  Diğer: { tr: "Diğer", en: "Other" },
 };
 function tc(cat, lang) {
   return categoryTranslations[cat] ? categoryTranslations[cat][lang] || cat : cat;
@@ -340,6 +379,63 @@ function WeeklySummary({ entries, lang }) {
               improvedLabel ? ` En çok gelişen alanın: ${improvedLabel}.` : " Seans kaydettikçe AI koç örüntüleri çıkarmaya başlayacak."
             }`}
       </p>
+    </div>
+  );
+}
+
+function TrendChart({ entries, lang }) {
+  const data = computeWeeklyTrend(entries, 8, lang);
+  const hasData = data.some((d) => d.count > 0);
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
+      <p className="text-neutral-100 text-xs font-medium mb-2">{t(lang, "trendChartTitle")}</p>
+      {hasData ? (
+        <div style={{ height: 140 }}>
+          <ResponsiveContainer>
+            <LineChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+              <CartesianGrid stroke="#262626" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: "#737373", fontSize: 10 }} axisLine={{ stroke: "#262626" }} tickLine={false} interval="preserveStartEnd" />
+              <YAxis allowDecimals={false} tick={{ fill: "#737373", fontSize: 10 }} axisLine={false} tickLine={false} width={24} />
+              <Tooltip
+                contentStyle={{ background: "#171717", border: "1px solid #262626", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: "#e5e5e5" }}
+                cursor={{ stroke: "#404040" }}
+              />
+              <Line type="monotone" dataKey="count" stroke="#dc2626" strokeWidth={2} dot={{ r: 3, fill: "#dc2626" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <p className="text-neutral-600 text-xs">{t(lang, "chartEmptyState")}</p>
+      )}
+    </div>
+  );
+}
+
+function CategoryChart({ entries, lang }) {
+  const data = computeCategoryDistribution(entries, 28).map((d) => ({ name: tc(d.key, lang), count: d.count }));
+  const hasData = data.some((d) => d.count > 0);
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
+      <p className="text-neutral-100 text-xs font-medium mb-2">{t(lang, "categoryChartTitle")}</p>
+      {hasData ? (
+        <div style={{ height: 160 }}>
+          <ResponsiveContainer>
+            <BarChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+              <XAxis dataKey="name" tick={{ fill: "#737373", fontSize: 10 }} axisLine={{ stroke: "#262626" }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: "#737373", fontSize: 10 }} axisLine={false} tickLine={false} width={24} />
+              <Tooltip
+                contentStyle={{ background: "#171717", border: "1px solid #262626", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: "#e5e5e5" }}
+                cursor={{ fill: "#262626" }}
+              />
+              <Bar dataKey="count" fill="#dc2626" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <p className="text-neutral-600 text-xs">{t(lang, "chartEmptyState")}</p>
+      )}
     </div>
   );
 }
@@ -572,7 +668,7 @@ function StreakStrip({ entries, longestStreak, lang }) {
 
 function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
   const { current: streak, longest: longestStreak } = computeStreaks(entries);
-  const weekCount = entries.filter((e) => e.createdAt >= startOfWeek(Date.now())).length;
+  const weekEntries = entries.filter((e) => e.createdAt >= startOfWeek(Date.now()));
 
   return (
     <div className="px-5 pb-5">
@@ -580,12 +676,14 @@ function JournalTab({ userId, entries, onAddClick, profileInfo, lang }) {
 
       <div className="flex gap-2 mb-4">
         <StatCard label={t(lang, "streakLabel")} value={`${streak} gün`} />
-        <StatCard label={t(lang, "weekLabel")} value={`${weekCount} seans`} />
+        <StatCard label={t(lang, "weekLabel")} value={`${weekEntries.length} seans`} />
       </div>
 
       <StreakStrip entries={entries} longestStreak={longestStreak} lang={lang} />
 
-      <WeeklySummary entries={entries} lang={lang} />
+      <WeeklySummary entries={weekEntries} lang={lang} />
+      <TrendChart entries={entries} lang={lang} />
+      <CategoryChart entries={entries} lang={lang} />
       <CoachTip userId={userId} entries={entries} profileInfo={profileInfo} lang={lang} />
 
       {entries.length > 0 && (
