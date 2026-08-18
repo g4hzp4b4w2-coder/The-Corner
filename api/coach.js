@@ -99,7 +99,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 300,
+        max_tokens: 500,
         system,
         messages: [{ role: "user", content: buildUserMessage(req.body, lang) }],
       }),
