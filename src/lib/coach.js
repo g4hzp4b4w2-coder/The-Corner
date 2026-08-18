@@ -28,6 +28,6 @@ export function getChatReply({ messages, images, caption, profile, entries, lang
   return callApi("/api/coach-chat", { messages, images, caption, profile, entries, lang });
 }
 
-export function getWeeklyPlan({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang }) {
-  return callApi("/api/coach-plan", { profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang });
+export function getWeeklyPlan({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang }) {
+  return callApi("/api/coach-plan", { profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang });
 }

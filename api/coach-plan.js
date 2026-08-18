@@ -10,7 +10,7 @@ const INTENSITY_LABEL = {
   fight: { tr: "Maça hazırlık", en: "Fight prep" },
 };
 
-function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang, knowledgeLine }) {
+function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang, knowledgeLine }) {
   const profileLine = [
     profile?.displayName && `İsim: ${profile.displayName}`,
     profile?.years && `Deneyim: ${profile.years}`,
@@ -41,6 +41,7 @@ function buildSystemPrompt({ profile, entries, recentChat, intensity, days, leve
       : `Hedef: ${intensityLabel} · Haftalık gün sayısı: ${days} · Seviye: ${level} · Odak: ${focus}`;
 
   const slotsLines = (timeSlots || []).map((s) => `- ${s.time} · ${s.duration} · ${s.intensity}`).join("\n");
+  const balanceLine = (categoryBalance || []).map((c) => `${c.key}: ${c.count}`).join(", ");
 
   const dayOrder = DAY_CODES.join(", ");
 
@@ -57,6 +58,8 @@ Boxer profile: ${profileLine || "(not provided)"}
 Recent training log entries:
 ${entriesLines || "(no entries yet)"}
 
+Session count by category over the last 4 weeks: ${balanceLine || "(no data yet)"}
+
 Recent coach chat:
 ${chatLines || "(no chat yet)"}
 
@@ -69,7 +72,8 @@ Rules:
 - For every training day's "time" and "duration", use one of the user's declared available time slots above — reuse slots across multiple days if there are fewer slots than training days. If no slots were provided, pick reasonable times yourself.
 - Match each session's intensity/volume to the declared intensity of the time slot you assigned it (an "Intense" slot should get a demanding session like sparring or high-tempo pad work; a "Light" slot should get lower-tempo technical/footwork work), as well as to the stated level and goal (fight prep should feel more match-focused with more sparring; development should be more balanced).
 - Spread training days reasonably across the week, don't bunch them all together.
-- Bias session content toward the stated focus area, and toward the boxer's weaknesses from their profile/log when relevant.
+- Bias session content toward the stated focus area, and toward the boxer's weaknesses from their profile/log when relevant. That stated focus area is the top priority.
+- As a secondary signal (never overriding the stated focus), look at the category session counts above — if a category is clearly underrepresented over the last 4 weeks, lean a bit more of the week's content toward it, so training stays reasonably balanced over time.
 - ${FIGHT_IQ_NOTE.en} If it's relevant, a training day's blocks/note can include a Fight IQ-building element (not every day needs one).
 - ${EXPERTISE_NOTE.en}
 - ${ADDRESS_NOTE.en}
@@ -89,6 +93,8 @@ Boksör profili: ${profileLine || "(belirtilmedi)"}
 Son antrenman günlüğü notları:
 ${entriesLines || "(henüz kayıt yok)"}
 
+Son 4 haftada kategoriye göre seans sayısı: ${balanceLine || "(henüz veri yok)"}
+
 Son koç sohbeti:
 ${chatLines || "(henüz sohbet yok)"}
 
@@ -101,7 +107,8 @@ Kurallar:
 - Her antrenman gününün "time" ve "duration" alanı için yukarıdaki bildirilen saatlerden birini kullan — saat sayısı antrenman günü sayısından azsa saatleri günler arasında tekrar kullan. Hiç saat belirtilmemişse kendin makul saatler seç.
 - Her seansın yoğunluğunu/hacmini, o saate atanan yoğunluk etiketine göre ayarla ("Yoğun" işaretli saate sparring ya da yüksek tempo pad çalışması gibi zorlu bir seans; "Hafif" işaretli saate daha düşük tempolu teknik/ayak işi çalışması ver), ayrıca belirtilen seviyeye ve hedefe göre de ayarla (maça hazırlıkta daha fazla sparring/maç odaklı hissettirsin; gelişimde daha dengeli olsun).
 - Antrenman günlerini haftaya makul şekilde yay, hepsini yan yana toplama.
-- Seans içeriğini belirtilen odak alanına, ve ilgiliyse profildeki/günlükteki zayıf yanlara doğru eğ.
+- Seans içeriğini belirtilen odak alanına, ve ilgiliyse profildeki/günlükteki zayıf yanlara doğru eğ. Bu belirtilen odak alanı en yüksek öncelik.
+- İkincil bir sinyal olarak (belirtilen odak alanını asla ezmeden), yukarıdaki kategori seans sayılarına bak — son 4 haftada belirgin şekilde az çalışılmış bir kategori varsa, haftanın içeriğinde ona biraz daha yer aç, böylece zamanla antrenman dengesi makul kalsın.
 - ${FIGHT_IQ_NOTE.tr} İlgiliyse bir antrenman gününün blocks/note kısmına Fight IQ geliştiren bir öğe ekleyebilirsin (her günde olması şart değil).
 - ${EXPERTISE_NOTE.tr}
 - ${ADDRESS_NOTE.tr}
@@ -143,7 +150,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang = "tr" } = req.body || {};
+  const { profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang = "tr" } = req.body || {};
   if (!intensity || !days || !level || !focus) {
     res.status(400).json({ error: "intensity, days, level and focus are required" });
     return;
@@ -162,7 +169,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 1600,
-        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, lang, knowledgeLine }),
+        system: buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang, knowledgeLine }),
         messages: [
           {
             role: "user",
