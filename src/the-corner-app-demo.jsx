@@ -294,6 +294,19 @@ function tp(topic, lang) {
   return postTopicTranslations[topic] ? postTopicTranslations[topic][lang] || topic : topic;
 }
 
+function entryCategoryLabel(e, lang) {
+  return (e.categories?.length ? e.categories : [e.type]).map((c) => tc(c, lang)).join(" + ");
+}
+
+function buildEntryShareText(e, lang) {
+  const cats = entryCategoryLabel(e, lang);
+  const detailParts = [];
+  if (e.note) detailParts.push(e.note);
+  if (e.blocks?.length) detailParts.push(e.blocks.join(" · "));
+  const detail = detailParts.join(" — ");
+  return lang === "en" ? `Logged a ${cats} session${detail ? `: ${detail}` : ""}` : `${cats} antrenmanı kaydettim${detail ? `: ${detail}` : ""}`;
+}
+
 const tagTranslations = {
   "sol el düşük": { tr: "sol el düşük", en: "low lead hand" },
   "bel dönüşü": { tr: "bel dönüşü", en: "hip rotation" },
@@ -650,9 +663,15 @@ function StreakStrip({ entries, longestStreak, lang }) {
   );
 }
 
-function JournalTab({ entries, onAddClick, lang }) {
+function JournalTab({ entries, onAddClick, onShareEntry, lang }) {
   const { current: streak, longest: longestStreak } = computeStreaks(entries);
   const weekEntries = entries.filter((e) => e.createdAt >= startOfWeek(Date.now()));
+  const [sharedEntryIds, setSharedEntryIds] = useState(() => new Set());
+
+  const shareEntry = (e) => {
+    onShareEntry(e);
+    setSharedEntryIds((prev) => new Set(prev).add(e.id));
+  };
 
   return (
     <div className="px-5 pb-5">
@@ -675,7 +694,7 @@ function JournalTab({ entries, onAddClick, lang }) {
             <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-neutral-100 text-sm font-medium">
-                  {e.label} · {(e.categories?.length ? e.categories : [e.type]).map((c) => tc(c, lang)).join(" + ")}
+                  {e.label} · {entryCategoryLabel(e, lang)}
                 </span>
                 <span className="text-neutral-500 text-xs">{e.duration}</span>
               </div>
@@ -706,7 +725,7 @@ function JournalTab({ entries, onAddClick, lang }) {
               {e.note && <p className="text-neutral-400 text-xs leading-relaxed mb-2">{e.note}</p>}
 
               {e.tags.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex gap-1.5 flex-wrap mb-2">
                   {e.tags.map((tag, i) => (
                     <span key={i} className={`text-[11px] px-2 py-0.5 rounded ${TAG_TONE[tag.tone]}`}>
                       {tt(tag.text.replace(" ↑", ""), lang)}
@@ -714,6 +733,14 @@ function JournalTab({ entries, onAddClick, lang }) {
                     </span>
                   ))}
                 </div>
+              )}
+
+              {sharedEntryIds.has(e.id) ? (
+                <span className="text-emerald-500 text-[10px]">{t(lang, "sharedLabel")}</span>
+              ) : (
+                <button onClick={() => shareEntry(e)} className="text-red-500 text-[10px] hover:text-red-400 transition-colors">
+                  {t(lang, "shareLabel")}
+                </button>
               )}
             </div>
           ))}
@@ -2367,6 +2394,10 @@ export default function TheCornerApp() {
     await addPost({ text: badge.shareText[lang] || badge.shareText.tr, stat: badge.label[lang] || badge.label.tr, topic: "Başarı" });
   };
 
+  const shareJournalEntry = async (entry) => {
+    await addPost({ text: buildEntryShareText(entry, lang), stat: `${entry.duration} · ${entryCategoryLabel(entry, lang)}`, topic: "Başarı" });
+  };
+
   const deletePost = async (id) => {
     const prevPosts = posts;
     setPosts((prev) => prev.filter((p) => p.id !== id));
@@ -2497,7 +2528,7 @@ export default function TheCornerApp() {
         showForm ? (
           <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
         ) : (
-          <JournalTab entries={entries} onAddClick={() => setShowForm(true)} lang={lang} />
+          <JournalTab entries={entries} onAddClick={() => setShowForm(true)} onShareEntry={shareJournalEntry} lang={lang} />
         )
       ) : tab === "coach" ? (
         <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
