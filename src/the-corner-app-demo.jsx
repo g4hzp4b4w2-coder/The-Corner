@@ -1774,8 +1774,21 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
       // proceed without chat context
     }
 
+    const categoryBalance = computeCategoryDistribution(entries, 28);
+
     try {
-      const res = await getWeeklyPlan({ profile: profileInfo, entries, recentChat: recentChat.slice(-8), intensity, days, level, focus, timeSlots, lang });
+      const res = await getWeeklyPlan({
+        profile: profileInfo,
+        entries,
+        recentChat: recentChat.slice(-8),
+        intensity,
+        days,
+        level,
+        focus,
+        timeSlots,
+        categoryBalance,
+        lang,
+      });
       setAiPlan(res.plan);
     } catch (e) {
       setAiPlan(buildPlan(intensity, days, focus, lang));
