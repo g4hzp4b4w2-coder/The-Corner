@@ -17,13 +17,16 @@ const COPY = {
   extracting: { tr: "Video işleniyor...", en: "Processing video..." },
   videoReadError: { tr: "Bu video okunamadı, başka birini dene.", en: "Couldn't read this video, try a different one." },
   framesReady: { tr: "kare hazır, gönderebilirsin", en: "frames ready, you can send" },
+  saveToJournal: { tr: "Günlüğe kaydet", en: "Save to journal" },
+  savedToJournal: { tr: "Günlüğe kaydedildi", en: "Saved to journal" },
+  saveToJournalError: { tr: "Kaydedilemedi, tekrar dene.", en: "Couldn't save, try again." },
 };
 
 function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
 }
 
-export default function CoachChat({ userId, profileInfo, entries, lang }) {
+export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
   const [messages, setMessages] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [input, setInput] = useState("");
@@ -32,6 +35,9 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
   const [videoFrames, setVideoFrames] = useState([]);
   const [extracting, setExtracting] = useState(false);
   const [videoError, setVideoError] = useState("");
+  const [videoReplyIds, setVideoReplyIds] = useState(() => new Set());
+  const [savedIds, setSavedIds] = useState(() => new Set());
+  const [savingId, setSavingId] = useState(null);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -101,12 +107,28 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
       });
       const savedAssistantMsg = await addChatMessage(userId, "assistant", reply.reply);
       setMessages((prev) => [...prev, savedAssistantMsg]);
+      if (framesToSend.length > 0) {
+        setVideoReplyIds((prev) => new Set(prev).add(savedAssistantMsg.id));
+      }
     } catch (e) {
       setError(c("error", lang));
       setInput(text);
       setVideoFrames(framesToSend);
     } finally {
       setSending(false);
+    }
+  };
+
+  const saveToJournal = async (m) => {
+    if (!onSaveVideoAnalysis || savingId) return;
+    setSavingId(m.id);
+    try {
+      await onSaveVideoAnalysis(m.content);
+      setSavedIds((prev) => new Set(prev).add(m.id));
+    } catch (e) {
+      setError(c("saveToJournalError", lang));
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -122,7 +144,7 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
           <p className="text-neutral-600 text-xs">{c("emptyState", lang)}</p>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div key={m.id} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
               <div
                 className={`max-w-[80%] text-xs leading-relaxed rounded-xl px-3 py-2 whitespace-pre-wrap ${
                   m.role === "user"
@@ -132,6 +154,18 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
               >
                 {m.content}
               </div>
+              {videoReplyIds.has(m.id) &&
+                (savedIds.has(m.id) ? (
+                  <span className="text-emerald-500 text-[10px] mt-1">{c("savedToJournal", lang)}</span>
+                ) : (
+                  <button
+                    onClick={() => saveToJournal(m)}
+                    disabled={savingId === m.id}
+                    className="text-red-500 text-[10px] mt-1 hover:text-red-400 disabled:opacity-50 transition-colors"
+                  >
+                    {savingId === m.id ? "…" : c("saveToJournal", lang)}
+                  </button>
+                ))}
             </div>
           ))
         )}

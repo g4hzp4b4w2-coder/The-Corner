@@ -56,6 +56,7 @@ const translations = {
   trendChartTitle: { tr: "Son 8 hafta", en: "Last 8 weeks" },
   categoryChartTitle: { tr: "Son 4 hafta · kategori dağılımı", en: "Last 4 weeks · category breakdown" },
   chartEmptyState: { tr: "Henüz gösterecek veri yok, birkaç seans kaydet.", en: "Not enough data yet — log a few sessions." },
+  videoAnalysisLabel: { tr: "Video analizi", en: "Video analysis" },
   aiCoachSuggestionLabel: { tr: "AI koç önerisi", en: "AI coach suggestion" },
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
@@ -2213,6 +2214,19 @@ export default function TheCornerApp() {
     setShowForm(false);
   };
 
+  const saveVideoAnalysis = async (note) => {
+    const entry = await addJournalEntry(session.user.id, {
+      label: t(lang, "videoAnalysisLabel"),
+      type: "Teknik",
+      duration: "—",
+      note,
+      blocks: [],
+      tags: [],
+      hasVideo: true,
+    });
+    setEntries((prev) => [entry, ...prev]);
+  };
+
   const toggleLike = async (id) => {
     const post = posts.find((p) => p.id === id);
     if (!post) return;
@@ -2367,7 +2381,7 @@ export default function TheCornerApp() {
           <JournalTab userId={session.user.id} entries={entries} onAddClick={() => setShowForm(true)} profileInfo={profileInfo} lang={lang} />
         )
       ) : tab === "coach" ? (
-        <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} />
+        <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
       ) : tab === "calendar" ? (
         <CalendarTab
           onMarkDone={addPlanEntry}
