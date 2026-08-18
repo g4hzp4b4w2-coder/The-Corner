@@ -57,6 +57,15 @@ const translations = {
   categoryChartTitle: { tr: "Son 4 hafta · kategori dağılımı", en: "Last 4 weeks · category breakdown" },
   chartEmptyState: { tr: "Henüz gösterecek veri yok, birkaç seans kaydet.", en: "Not enough data yet — log a few sessions." },
   videoAnalysisLabel: { tr: "Video analizi", en: "Video analysis" },
+  sparringToggleLabel: { tr: "Bu bir sparring seansıydı", en: "This was a sparring session" },
+  sparringRoundsLabel: { tr: "Round sayısı", en: "Round count" },
+  sparringResultLabel: { tr: "Sonuç", en: "Result" },
+  sparringResultPlaceholder: { tr: "Seç…", en: "Choose…" },
+  sparringWon: { tr: "Kazandım", en: "Won" },
+  sparringLost: { tr: "Kaybettim", en: "Lost" },
+  sparringDraw: { tr: "Berabere", en: "Draw" },
+  sparringOpponentLabel: { tr: "Rakip ağırlığı (opsiyonel)", en: "Opponent weight (optional)" },
+  sparringOpponentPlaceholder: { tr: "örn. 75 kg", en: "e.g. 165 lbs" },
   aiCoachSuggestionLabel: { tr: "AI koç önerisi", en: "AI coach suggestion" },
   nextSessionLabel: { tr: "Bir sonraki antrenmanda çalış", en: "Work on this in your next session" },
   referenceFighterLabel: { tr: "Referans dövüşçün", en: "Your reference fighter" },
@@ -787,6 +796,10 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
   const [note, setNote] = useState("");
   const [blocks, setBlocks] = useState([]);
   const [blockDraft, setBlockDraft] = useState("");
+  const [isSparring, setIsSparring] = useState(false);
+  const [rounds, setRounds] = useState("");
+  const [result, setResult] = useState("");
+  const [opponentWeight, setOpponentWeight] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -800,13 +813,21 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
   const removeBlock = (i) => setBlocks((prev) => prev.filter((_, idx) => idx !== i));
 
   const submit = async () => {
-    if (!duration.trim() || (!note.trim() && blocks.length === 0)) {
+    const sparringBlocks = [];
+    if (isSparring) {
+      if (rounds.trim()) sparringBlocks.push(`${t(lang, "sparringRoundsLabel")}: ${rounds.trim()} ${lang === "en" ? "rounds" : "raund"}`);
+      if (result) sparringBlocks.push(`${t(lang, "sparringResultLabel")}: ${result}`);
+      if (opponentWeight.trim()) sparringBlocks.push(`${t(lang, "sparringOpponentLabel")}: ${opponentWeight.trim()}`);
+    }
+    const finalBlocks = [...sparringBlocks, ...blocks];
+
+    if (!duration.trim() || (!note.trim() && finalBlocks.length === 0)) {
       setError(t(lang, "fillDurationNoteError"));
       return;
     }
     setSaving(true);
     try {
-      await onSubmit({ type, duration: `${duration} dk`, note, blocks });
+      await onSubmit({ type, duration: `${duration} dk`, note, blocks: finalBlocks });
     } finally {
       setSaving(false);
     }
@@ -842,6 +863,53 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
           placeholder="30"
           className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2 mb-3"
         />
+
+        <button
+          type="button"
+          onClick={() => setIsSparring((v) => !v)}
+          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 mb-3 border text-sm transition-colors ${
+            isSparring ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-950 border-neutral-800 text-neutral-400"
+          }`}
+        >
+          <span>{t(lang, "sparringToggleLabel")}</span>
+          {isSparring && <CircleCheck size={16} />}
+        </button>
+
+        {isSparring && (
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 mb-3 flex flex-col gap-2.5">
+            <div>
+              <label className="text-neutral-500 text-xs block mb-1">{t(lang, "sparringRoundsLabel")}</label>
+              <input
+                value={rounds}
+                onChange={(e) => setRounds(e.target.value)}
+                placeholder="3"
+                className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="text-neutral-500 text-xs block mb-1">{t(lang, "sparringResultLabel")}</label>
+              <select
+                value={result}
+                onChange={(e) => setResult(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+              >
+                <option value="">{t(lang, "sparringResultPlaceholder")}</option>
+                <option value={t(lang, "sparringWon")}>{t(lang, "sparringWon")}</option>
+                <option value={t(lang, "sparringLost")}>{t(lang, "sparringLost")}</option>
+                <option value={t(lang, "sparringDraw")}>{t(lang, "sparringDraw")}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-neutral-500 text-xs block mb-1">{t(lang, "sparringOpponentLabel")}</label>
+              <input
+                value={opponentWeight}
+                onChange={(e) => setOpponentWeight(e.target.value)}
+                placeholder={t(lang, "sparringOpponentPlaceholder")}
+                className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+              />
+            </div>
+          </div>
+        )}
 
         <label className="text-neutral-500 text-xs block mb-1">{t(lang, "blocksLabel")}</label>
         {blocks.length > 0 && (
