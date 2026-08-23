@@ -2,6 +2,12 @@ import { verifyUser } from "./_lib/verifyUser.js";
 import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
+// Generating a full weekly plan is a long, structured JSON reply — give it
+// more room than Vercel's default timeout before it gets killed mid-request.
+export const config = {
+  maxDuration: 60,
+};
+
 const MODEL = "claude-sonnet-5";
 const DAY_CODES = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 

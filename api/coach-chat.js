@@ -2,6 +2,13 @@ import { verifyUser } from "./_lib/verifyUser.js";
 import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
+// Video analysis sends many images plus a longer report-mode reply request,
+// which can take Claude a while to generate. Vercel kills the function at
+// its default timeout with a bare 502 (no error body) if this isn't raised.
+export const config = {
+  maxDuration: 60,
+};
+
 const MODEL = "claude-sonnet-5";
 const MAX_IMAGES = 20;
 
