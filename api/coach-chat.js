@@ -11,6 +11,25 @@ const INSIGHT_INSTRUCTIONS = {
   en: `\n\nWrite your reply normally. Then, IF this exchange surfaces a generalized, anonymized coaching observation (a pattern applicable to any boxer — e.g. "when this kind of question comes up, this explanation tends to land"; NEVER a name, age, school, or any personal detail), add it on its own separate line at the very end, first writing "${INSIGHT_MARKER}" then the observation on the next line. If no such observation applies, don't add this line at all — don't force one.`,
 };
 
+const VIDEO_TYPE_GUIDANCE = {
+  "Gölge Boksu": {
+    tr: "Kullanıcı bu videonun bir GÖLGE BOKSU çalışması olduğunu belirtti — ayak işine, kombinasyon akıcılığına, hayali rakibe göre pozisyon almaya öncelik ver.",
+    en: "The user marked this video as SHADOWBOXING — prioritize footwork, combination flow, and positioning against an imaginary opponent.",
+  },
+  "Torba Çalışması": {
+    tr: "Kullanıcı bu videonun bir TORBA ÇALIŞMASI olduğunu belirtti — vuruş gücü aktarımına, temas anındaki tekniğe, kombinasyon sonrası toparlanmaya öncelik ver.",
+    en: "The user marked this video as HEAVY BAG WORK — prioritize power transfer, technique on impact, and recovery after combinations.",
+  },
+  Sparring: {
+    tr: "Kullanıcı bu videonun bir SPARRING olduğunu belirtti — savunma tepkilerine, mesafe yönetimine, karşı vuruş fırsatlarına öncelik ver.",
+    en: "The user marked this video as SPARRING — prioritize defensive reactions, distance management, and counter-punching opportunities.",
+  },
+  "Teknik Çalışma": {
+    tr: "Kullanıcı bu videonun bir TEKNİK ÇALIŞMA olduğunu belirtti — çalışılan spesifik hareketin/tekniğin doğru uygulanmasına öncelik ver.",
+    en: "The user marked this video as TECHNICAL DRILLING — prioritize correct execution of the specific technique being drilled.",
+  },
+};
+
 const VIDEO_INSTRUCTIONS = {
   tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi — yani bu kareler aksiyonun yoğunlaştığı anları yakalamaya çalışıyor. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren camgöbeği renginde çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil. Bu sefer kısa tutma — kareleri baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın kareler boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda gerçek takip verisinden çıkarılmış sayısal ölçümler varsa, bunları görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
   en: "\n\nThis message includes multiple sequential frames from the user's video. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes), so these frames are trying to capture the action-heavy moments. The frames may have cyan lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess. Don't keep it short this time — go through the frames and write a longer, structured analysis: (1) how stance and guard change across the frames, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If numeric measurements from real tracking data are provided below, prioritize and directly reference them over your own visual guess (e.g. \"based on the tracking data...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
@@ -89,7 +108,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { messages, images, poseMetrics, caption, profile, entries, lang = "tr" } = req.body || {};
+  const { messages, images, poseMetrics, videoType, caption, profile, entries, lang = "tr" } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages is required" });
     return;
@@ -121,9 +140,11 @@ export default async function handler(req, res) {
   const knowledge = await getRecentKnowledge(lang);
   const knowledgeLine = buildKnowledgeLine(knowledge, lang);
   const poseMetricsLine = hasImages && poseMetrics ? `\n\n${poseMetrics}` : "";
+  const videoTypeLine = hasImages && videoType && VIDEO_TYPE_GUIDANCE[videoType] ? `\n\n${VIDEO_TYPE_GUIDANCE[videoType][lang] || VIDEO_TYPE_GUIDANCE[videoType].tr}` : "";
   const system =
     buildSystemPrompt(profile, entries, lang, knowledgeLine) +
     (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "") +
+    videoTypeLine +
     poseMetricsLine +
     (INSIGHT_INSTRUCTIONS[lang] || INSIGHT_INSTRUCTIONS.tr);
 
@@ -137,7 +158,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: hasImages ? 1100 : 500,
+        max_tokens: hasImages ? 1700 : 500,
         system,
         messages: anthropicMessages,
       }),

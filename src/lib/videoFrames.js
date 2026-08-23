@@ -37,7 +37,7 @@ function pixelMotionScore(a, b) {
   return sum;
 }
 
-export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, lang = "tr" } = {}) {
+export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, lang = "tr", onProgress } = {}) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.muted = true;
@@ -121,6 +121,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
         prevPixelData = data;
       }
       candidates.push({ t, score });
+      onProgress?.({ phase: "probe", done: i + 1, total: candidateCount });
     }
 
     // Always keep the first and last frame for context (starting stance,
@@ -146,7 +147,8 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
     // landmarks for the AI's numeric summary.
     const frames = [];
     const landmarksSequence = [];
-    for (const c of selected) {
+    for (let i = 0; i < selected.length; i++) {
+      const c = selected[i];
       video.currentTime = c.t;
       await waitFor(video, "seeked");
       ctx.drawImage(video, 0, 0, width, height);
@@ -154,7 +156,9 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
       landmarksSequence.push(landmarks);
       drawSkeleton(canvas, landmarks);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
-      frames.push(dataUrl.split(",")[1]);
+      const frame = dataUrl.split(",")[1];
+      frames.push(frame);
+      onProgress?.({ phase: "final", done: i + 1, total: selected.length, frame });
     }
 
     if (frames.length === 0) {
