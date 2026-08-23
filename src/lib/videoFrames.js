@@ -1,4 +1,4 @@
-import { detectAndDrawPose, computePoseMetrics } from "./poseAnalysis";
+import { createPoseSession, poseMotionScore, drawSkeleton, computePoseMetrics } from "./poseAnalysis";
 
 function waitFor(target, event) {
   return new Promise((resolve, reject) => {
@@ -25,7 +25,9 @@ function frameCountForDuration(duration) {
   return 18;
 }
 
-function motionScore(a, b) {
+// Fallback motion signal for when real pose tracking isn't available —
+// raw average pixel change between two frames.
+function pixelMotionScore(a, b) {
   let sum = 0;
   for (let i = 0; i < a.length; i += 4) {
     const ga = (a[i] + a[i + 1] + a[i + 2]) / 3;
@@ -47,6 +49,19 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
   video.style.width = "1px";
   video.style.height = "1px";
   document.body.appendChild(video);
+
+  // One pose-tracking session spans the whole video (probe pass and final
+  // pass alike) so MediaPipe's VIDEO mode sees one continuous, increasing
+  // timestamp sequence — this is what lets it track more smoothly than
+  // treating every frame as a cold, isolated image. If the model can't
+  // load at all (network issue, unsupported device), we fall back to the
+  // old pixel-based motion detection for the whole run.
+  let poseSession = null;
+  try {
+    poseSession = await createPoseSession();
+  } catch (e) {
+    poseSession = null;
+  }
 
   try {
     video.src = url;
@@ -72,10 +87,13 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
     canvas.height = height;
     const ctx = canvas.getContext("2d");
 
-    // First pass: sample many small, cheap frames and score motion between
-    // consecutive ones (sum of pixel deltas) to find the moments with the
-    // most movement — punches and fast exchanges show up as motion spikes.
-    const probeW = 48;
+    // First pass: sample candidate frames across the whole clip and score
+    // the real body motion between consecutive ones (via pose tracking, so
+    // we're measuring actual movement, not just changing pixels) to find
+    // the moments with the most action — punches and fast exchanges show up
+    // as motion spikes. Falls back to comparing raw pixels if pose tracking
+    // isn't available this run.
+    const probeW = 256;
     const probeH = Math.round((vh / vw) * probeW) || probeW;
     const probeCanvas = document.createElement("canvas");
     probeCanvas.width = probeW;
@@ -84,15 +102,25 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
 
     const candidateCount = Math.min(30, Math.max(Math.round(targetCount * 2.5), 18));
     const candidates = [];
-    let prevData = null;
+    let prevLandmarks = null;
+    let prevPixelData = null;
     for (let i = 0; i < candidateCount; i++) {
       const t = Math.max(0, Math.min(duration - 0.05, (duration * i) / Math.max(candidateCount - 1, 1)));
       video.currentTime = t;
       await waitFor(video, "seeked");
       probeCtx.drawImage(video, 0, 0, probeW, probeH);
-      const data = probeCtx.getImageData(0, 0, probeW, probeH).data;
-      candidates.push({ t, score: prevData ? motionScore(data, prevData) : 0 });
-      prevData = data;
+
+      let score = 0;
+      if (poseSession) {
+        const landmarks = poseSession.detect(probeCanvas);
+        score = poseMotionScore(prevLandmarks, landmarks);
+        prevLandmarks = landmarks;
+      } else {
+        const data = probeCtx.getImageData(0, 0, probeW, probeH).data;
+        score = prevPixelData ? pixelMotionScore(data, prevPixelData) : 0;
+        prevPixelData = data;
+      }
+      candidates.push({ t, score });
     }
 
     // Always keep the first and last frame for context (starting stance,
@@ -112,19 +140,19 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
 
     const selected = [first, ...picked, last].filter(Boolean).sort((a, b) => a.t - b.t);
 
-    // Second pass: redraw only the selected timestamps at full resolution,
-    // running real pose detection on each so the AI gets both a skeleton
-    // overlay (visual) and measured landmark data (numeric), not just a
-    // still image to guess from. Pose detection is best-effort — if it
-    // fails or the model can't load, frames still go out as plain images.
+    // Second pass: redraw only the selected timestamps at full resolution
+    // and run pose detection again at that resolution (more accurate than
+    // the small probe frames) to draw a real skeleton overlay and collect
+    // landmarks for the AI's numeric summary.
     const frames = [];
     const landmarksSequence = [];
     for (const c of selected) {
       video.currentTime = c.t;
       await waitFor(video, "seeked");
       ctx.drawImage(video, 0, 0, width, height);
-      const landmarks = await detectAndDrawPose(canvas);
+      const landmarks = poseSession ? poseSession.detect(canvas) : null;
       landmarksSequence.push(landmarks);
+      drawSkeleton(canvas, landmarks);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       frames.push(dataUrl.split(",")[1]);
     }
@@ -137,5 +165,6 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
   } finally {
     URL.revokeObjectURL(url);
     document.body.removeChild(video);
+    poseSession?.close();
   }
 }

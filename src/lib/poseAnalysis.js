@@ -1,24 +1,74 @@
-let landmarkerPromise = null;
+let visionPromise = null;
 
-function getLandmarker() {
-  if (!landmarkerPromise) {
-    landmarkerPromise = (async () => {
-      const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
-      const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm");
-      return PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-          delegate: "GPU",
-        },
-        runningMode: "IMAGE",
-        numPoses: 1,
-      });
+// The WASM runtime + model files are fetched once and cached by the browser;
+// this just avoids kicking off that fetch more than once per page load.
+function getVision() {
+  if (!visionPromise) {
+    visionPromise = (async () => {
+      const { FilesetResolver } = await import("@mediapipe/tasks-vision");
+      return FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm");
     })().catch((e) => {
-      landmarkerPromise = null; // allow retrying on the next frame instead of staying broken forever
+      visionPromise = null; // let a later attempt retry instead of staying broken forever
       throw e;
     });
   }
-  return landmarkerPromise;
+  return visionPromise;
+}
+
+// A pose session wraps one PoseLandmarker instance running in MediaPipe's
+// "VIDEO" mode, which — unlike treating every frame as an isolated image —
+// tracks temporal continuity between calls (smoother, more stable joint
+// positions across a sequence than detecting each frame cold). VIDEO mode
+// requires strictly increasing timestamps across calls to the same
+// instance; we don't need these to match the actual video time, just to
+// keep increasing, so each session tracks its own synthetic counter.
+export async function createPoseSession() {
+  const { PoseLandmarker } = await import("@mediapipe/tasks-vision");
+  const vision = await getVision();
+  const landmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      delegate: "GPU",
+    },
+    runningMode: "VIDEO",
+    numPoses: 1,
+  });
+
+  let ts = 0;
+
+  return {
+    // Returns the 33-point landmark array for this frame, or null if no
+    // pose was found or detection failed — never throws.
+    detect(imageSource) {
+      ts += 33;
+      try {
+        const result = landmarker.detectForVideo(imageSource, ts);
+        return result?.landmarks?.[0] || null;
+      } catch (e) {
+        return null;
+      }
+    },
+    close() {
+      try {
+        landmarker.close();
+      } catch (e) {
+        // already gone, nothing to do
+      }
+    },
+  };
+}
+
+// Sum of per-joint displacement between two landmark sets (normalized 0-1
+// coordinates), used to score how much real body motion happened between
+// two frames — a much more direct signal than comparing raw pixels, which
+// can be thrown off by lighting, camera shake, or background movement.
+export function poseMotionScore(a, b) {
+  if (!a || !b) return 0;
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+  }
+  return sum;
 }
 
 // Pairs of landmark indices to connect when drawing the skeleton.
@@ -38,45 +88,31 @@ const CONNECTIONS = [
   [26, 28],
 ];
 
-// Runs pose detection on a canvas frame and draws the skeleton directly onto
-// it. Returns the raw landmarks (for metric computation) or null if no pose
-// was found or detection failed for any reason — callers should treat that as
-// "no pose data this frame" and keep going, never as a fatal error.
-export async function detectAndDrawPose(canvas) {
-  try {
-    const landmarker = await getLandmarker();
-    const result = landmarker.detect(canvas);
-    const landmarks = result?.landmarks?.[0];
-    if (!landmarks) return null;
+export function drawSkeleton(canvas, landmarks) {
+  if (!landmarks) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
 
-    const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#22d3ee";
+  ctx.fillStyle = "#22d3ee";
 
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#22d3ee";
-    ctx.fillStyle = "#22d3ee";
+  CONNECTIONS.forEach(([a, b]) => {
+    const pa = landmarks[a];
+    const pb = landmarks[b];
+    if (!pa || !pb) return;
+    ctx.beginPath();
+    ctx.moveTo(pa.x * w, pa.y * h);
+    ctx.lineTo(pb.x * w, pb.y * h);
+    ctx.stroke();
+  });
 
-    CONNECTIONS.forEach(([a, b]) => {
-      const pa = landmarks[a];
-      const pb = landmarks[b];
-      if (!pa || !pb) return;
-      ctx.beginPath();
-      ctx.moveTo(pa.x * w, pa.y * h);
-      ctx.lineTo(pb.x * w, pb.y * h);
-      ctx.stroke();
-    });
-
-    landmarks.forEach((p) => {
-      ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    return landmarks;
-  } catch (e) {
-    return null;
-  }
+  landmarks.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x * w, p.y * h, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 function avg(arr) {
