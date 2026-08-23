@@ -36,8 +36,19 @@ const REPORT_MODE_INSTRUCTIONS = {
 };
 
 const VIDEO_INSTRUCTIONS = {
-  tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi — yani bu kareler aksiyonun yoğunlaştığı anları yakalamaya çalışıyor. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren camgöbeği renginde çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil. Bu sefer kısa tutma — kareleri baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın kareler boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda gerçek takip verisinden çıkarılmış sayısal ölçümler varsa, bunları görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
-  en: "\n\nThis message includes multiple sequential frames from the user's video. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes), so these frames are trying to capture the action-heavy moments. The frames may have cyan lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess. Don't keep it short this time — go through the frames and write a longer, structured analysis: (1) how stance and guard change across the frames, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If numeric measurements from real tracking data are provided below, prioritize and directly reference them over your own visual guess (e.g. \"based on the tracking data...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
+  tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var, HER KARENİN HEMEN ÖNCESİNDE o karenin videodaki gerçek saniyesi yazıyor (örn. \"Video zamanı: 3.2s\"). Bu çok önemli: yorumunda ASLA \"1. karede\", \"4. karede\" gibi kare numarası kullanma — bunun yerine gerçek saniyeyi kullan (örn. \"videonun 3.2. saniyesinde guard düştü\", \"klibin başında...\", \"9. saniye civarında...\"). Bu, tek tek fotoğraflara değil, tek bir sürekli videoya baktığını gösterir. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren renkli çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil; kadrajda iki kişi varsa (örn. sparring) her biri farklı renkte çizilir. Bu sefer kısa tutma — videoyu baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın klip boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda gerçek takip verisinden çıkarılmış sayısal ölçümler varsa, bunları görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
+  en: "\n\nThis message includes multiple sequential frames from the user's video, and EACH FRAME IS IMMEDIATELY PRECEDED by the real video timestamp it was taken at (e.g. \"Video time: 3.2s\"). This matters: NEVER refer to \"frame 1\" or \"frame 4\" in your analysis — use the real second instead (e.g. \"your guard dropped around the 3.2-second mark\", \"early in the clip...\", \"around the 9-second point...\"). This makes it clear you're looking at one continuous video, not a stack of disconnected photos. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes). The frames may have colored lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess; if two people are in frame (e.g. sparring), each is drawn in a different color. Don't keep it short this time — go through the whole clip and write a longer, structured analysis: (1) how stance and guard change across the clip, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If numeric measurements from real tracking data are provided below, prioritize and directly reference them over your own visual guess (e.g. \"based on the tracking data...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
+};
+
+const YOU_PERSON_NOTE = {
+  cyan: {
+    tr: "\n\nBu bir sparring videosu ve kadrajda iki kişi var. Kullanıcı hangisinin kendisi olduğunu belirtti: CAMGÖBEĞİ (açık mavi) renkte çizilen iskelet KULLANICI, TURUNCU renkteki iskelet ise rakip/antrenman arkadaşı. Analizini ve önerilerini SADECE camgöbeği renkli kişiye göre yap, turuncu kişiden sadece bağlam için (örn. rakibin pozisyonuna göre tepki) bahset.",
+    en: "\n\nThis is a sparring video with two people in frame. The user identified which one is them: the skeleton drawn in CYAN is the USER, the one drawn in ORANGE is the sparring partner/opponent. Base your analysis and suggestions ONLY on the cyan person, and only mention the orange person for context (e.g. reacting to the opponent's position).",
+  },
+  amber: {
+    tr: "\n\nBu bir sparring videosu ve kadrajda iki kişi var. Kullanıcı hangisinin kendisi olduğunu belirtti: TURUNCU renkte çizilen iskelet KULLANICI, CAMGÖBEĞİ (açık mavi) renkteki iskelet ise rakip/antrenman arkadaşı. Analizini ve önerilerini SADECE turuncu renkli kişiye göre yap, camgöbeği kişiden sadece bağlam için (örn. rakibin pozisyonuna göre tepki) bahset.",
+    en: "\n\nThis is a sparring video with two people in frame. The user identified which one is them: the skeleton drawn in ORANGE is the USER, the one drawn in CYAN is the sparring partner/opponent. Base your analysis and suggestions ONLY on the orange person, and only mention the cyan person for context (e.g. reacting to the opponent's position).",
+  },
 };
 
 function buildSystemPrompt(profile, entries, lang, knowledgeLine) {
@@ -113,7 +124,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { messages, images, poseMetrics, videoType, reportMode, caption, profile, entries, lang = "tr" } = req.body || {};
+  const { messages, images, frameTimestamps, poseMetrics, videoType, youPersonIndex, reportMode, caption, profile, entries, lang = "tr" } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages is required" });
     return;
@@ -131,10 +142,16 @@ export default async function handler(req, res) {
 
   let lastContent = last.content;
   if (hasImages) {
-    const imageBlocks = images.slice(0, MAX_IMAGES).map((data) => ({
-      type: "image",
-      source: { type: "base64", media_type: "image/jpeg", data },
-    }));
+    const clippedImages = images.slice(0, MAX_IMAGES);
+    const clippedTimestamps = Array.isArray(frameTimestamps) ? frameTimestamps.slice(0, MAX_IMAGES) : [];
+    const imageBlocks = clippedImages.flatMap((data, i) => {
+      const blocks = [];
+      if (clippedTimestamps[i] !== undefined) {
+        blocks.push({ type: "text", text: lang === "en" ? `Video time: ${clippedTimestamps[i]}s` : `Video zamanı: ${clippedTimestamps[i]}s` });
+      }
+      blocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
+      return blocks;
+    });
     const text =
       (caption && caption.trim()) ||
       (lang === "en" ? "Can you analyze my form in these video frames?" : "Bu video karelerindeki formumu analiz eder misin?");
@@ -147,11 +164,14 @@ export default async function handler(req, res) {
   const poseMetricsLine = hasImages && poseMetrics ? `\n\n${poseMetrics}` : "";
   const videoTypeLine = hasImages && videoType && VIDEO_TYPE_GUIDANCE[videoType] ? `\n\n${VIDEO_TYPE_GUIDANCE[videoType][lang] || VIDEO_TYPE_GUIDANCE[videoType].tr}` : "";
   const reportModeLine = hasImages && reportMode ? REPORT_MODE_INSTRUCTIONS[lang] || REPORT_MODE_INSTRUCTIONS.tr : "";
+  const youPersonKey = youPersonIndex === 0 ? "cyan" : youPersonIndex === 1 ? "amber" : null;
+  const youPersonLine = hasImages && youPersonKey ? YOU_PERSON_NOTE[youPersonKey][lang] || YOU_PERSON_NOTE[youPersonKey].tr : "";
   const system =
     buildSystemPrompt(profile, entries, lang, knowledgeLine) +
     (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "") +
     videoTypeLine +
     poseMetricsLine +
+    youPersonLine +
     reportModeLine +
     (INSIGHT_INSTRUCTIONS[lang] || INSIGHT_INSTRUCTIONS.tr);
 

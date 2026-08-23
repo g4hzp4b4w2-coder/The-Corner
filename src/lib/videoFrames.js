@@ -1,4 +1,4 @@
-import { createPoseSession, poseMotionScore, drawSkeleton, computePoseMetrics } from "./poseAnalysis";
+import { createPoseSession, poseMotionScore, drawSkeletons } from "./poseAnalysis";
 
 function waitFor(target, event) {
   return new Promise((resolve, reject) => {
@@ -37,7 +37,13 @@ function pixelMotionScore(a, b) {
   return sum;
 }
 
-export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, lang = "tr", onProgress } = {}) {
+// Returns { frames, framesPeople, frameTimestamps }. framesPeople is the raw,
+// per-frame list of detected people (each an array of pose landmark sets —
+// usually length 1, length 2 for a two-person clip like sparring). Metrics
+// aren't computed here because a two-person clip needs the caller to ask
+// "which one is you" first — see resolveSinglePersonSequence /
+// linkPersonAcrossFrames / computePoseMetrics in poseAnalysis.js.
+export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, onProgress } = {}) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.muted = true;
@@ -92,7 +98,9 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
     // we're measuring actual movement, not just changing pixels) to find
     // the moments with the most action — punches and fast exchanges show up
     // as motion spikes. Falls back to comparing raw pixels if pose tracking
-    // isn't available this run.
+    // isn't available this run. Uses just the first detected person for
+    // scoring purposes — good enough to find "when did something happen",
+    // identity doesn't matter yet at this stage.
     const probeW = 256;
     const probeH = Math.round((vh / vw) * probeW) || probeW;
     const probeCanvas = document.createElement("canvas");
@@ -112,7 +120,8 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
 
       let score = 0;
       if (poseSession) {
-        const landmarks = poseSession.detect(probeCanvas);
+        const people = poseSession.detectAll(probeCanvas);
+        const landmarks = people[0] || null;
         score = poseMotionScore(prevLandmarks, landmarks);
         prevLandmarks = landmarks;
       } else {
@@ -133,28 +142,31 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
     const minGap = duration / (targetCount * 1.5);
 
     const picked = [];
-    for (const c of [...middle].sort((a, b) => b.score - a.score)) {
+    for (const cand of [...middle].sort((a, b) => b.score - a.score)) {
       if (picked.length >= targetCount - 2) break;
-      if (picked.some((p) => Math.abs(p.t - c.t) < minGap)) continue;
-      picked.push(c);
+      if (picked.some((p) => Math.abs(p.t - cand.t) < minGap)) continue;
+      picked.push(cand);
     }
 
     const selected = [first, ...picked, last].filter(Boolean).sort((a, b) => a.t - b.t);
 
     // Second pass: redraw only the selected timestamps at full resolution
     // and run pose detection again at that resolution (more accurate than
-    // the small probe frames) to draw a real skeleton overlay and collect
-    // landmarks for the AI's numeric summary.
+    // the small probe frames) to draw real skeleton overlays — one color
+    // per detected person — and collect the raw per-person landmarks for
+    // whatever the caller needs to do with identity afterward.
     const frames = [];
-    const landmarksSequence = [];
+    const framesPeople = [];
+    const frameTimestamps = [];
     for (let i = 0; i < selected.length; i++) {
-      const c = selected[i];
-      video.currentTime = c.t;
+      const cand = selected[i];
+      video.currentTime = cand.t;
       await waitFor(video, "seeked");
       ctx.drawImage(video, 0, 0, width, height);
-      const landmarks = poseSession ? poseSession.detect(canvas) : null;
-      landmarksSequence.push(landmarks);
-      drawSkeleton(canvas, landmarks);
+      const people = poseSession ? poseSession.detectAll(canvas) : [];
+      framesPeople.push(people);
+      frameTimestamps.push(Math.round(cand.t * 10) / 10);
+      drawSkeletons(canvas, people);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       const frame = dataUrl.split(",")[1];
       frames.push(frame);
@@ -165,7 +177,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
       throw new Error("No frames extracted");
     }
 
-    return { frames, poseMetrics: computePoseMetrics(landmarksSequence, lang) };
+    return { frames, framesPeople, frameTimestamps };
   } finally {
     URL.revokeObjectURL(url);
     document.body.removeChild(video);

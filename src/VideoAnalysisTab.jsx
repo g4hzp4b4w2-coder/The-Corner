@@ -3,6 +3,7 @@ import { Video, X, BookmarkPlus, MessageSquarePlus } from "lucide-react";
 import { addChatMessage } from "./lib/db";
 import { getChatReply } from "./lib/coach";
 import { extractFramesFromVideo } from "./lib/videoFrames";
+import { resolveSinglePersonSequence, linkPersonAcrossFrames, computePoseMetrics } from "./lib/poseAnalysis";
 
 const VIDEO_TYPES = ["Gölge Boksu", "Torba Çalışması", "Sparring", "Teknik Çalışma"];
 const VIDEO_TYPE_LABELS = {
@@ -14,6 +15,12 @@ const VIDEO_TYPE_LABELS = {
 function videoTypeLabel(type, lang) {
   return VIDEO_TYPE_LABELS[type]?.[lang] || VIDEO_TYPE_LABELS[type]?.tr || type;
 }
+
+const PERSON_COLOR_HEX = ["#22d3ee", "#f59e0b"];
+const PERSON_COLOR_NAME = {
+  tr: ["Camgöbeği", "Turuncu"],
+  en: ["Cyan", "Orange"],
+};
 
 const REPORT_HEADINGS = [
   "Duruş ve Guard",
@@ -45,6 +52,11 @@ const COPY = {
   sentToChat: { tr: "Sohbete eklendi", en: "Added to chat" },
   sendError: { tr: "Gönderilemedi, tekrar dene.", en: "Couldn't send, try again." },
   emptyState: { tr: "Henüz analiz yok. Bir video yükleyerek başla.", en: "No analysis yet. Start by uploading a video." },
+  whoAreYouTitle: { tr: "Kadrajda iki kişi var — hangisi sensin?", en: "Two people are in frame — which one is you?" },
+  whoAreYouSubtitle: {
+    tr: "Analizi doğru kişiye göre yapabilmemiz için renk seç.",
+    en: "Pick a color so the analysis focuses on the right person.",
+  },
 };
 
 function c(key, lang) {
@@ -84,6 +96,10 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
   const [videoFrames, setVideoFrames] = useState([]);
   const [videoError, setVideoError] = useState("");
 
+  // Raw multi-person data held only while we wait for the user to pick who
+  // they are in a two-person clip — cleared once identity is resolved.
+  const [pendingPick, setPendingPick] = useState(null); // { framesPeople, frameTimestamps, pickFrameIdx, frames }
+
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [analysisError, setAnalysisError] = useState("");
@@ -104,6 +120,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setPendingVideoFile(null);
     setVideoFrames([]);
     setVideoError("");
+    setPendingPick(null);
     setAnalysis(null);
     setAnalysisError("");
     setAnalyzedVideoType("");
@@ -122,47 +139,18 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setVideoType(VIDEO_TYPES[0]);
   };
 
-  const startAnalysis = async () => {
-    if (!pendingVideoFile) return;
-    const type = videoType;
-    setExtracting(true);
-    setExtractionProgress({ phase: "probe", done: 0, total: 1 });
-    setVideoFrames([]);
-
-    let frames, poseMetrics;
-    try {
-      const result = await extractFramesFromVideo(pendingVideoFile, {
-        lang,
-        onProgress: (p) => {
-          setExtractionProgress(p);
-          if (p.phase === "final" && p.frame) {
-            setVideoFrames((prev) => [...prev, p.frame]);
-          }
-        },
-      });
-      frames = result.frames;
-      poseMetrics = result.poseMetrics;
-      setVideoFrames(frames);
-    } catch (err) {
-      setVideoError(c("videoReadError", lang));
-      setExtracting(false);
-      setExtractionProgress(null);
-      setPendingVideoFile(null);
-      return;
-    }
-    setExtracting(false);
-    setExtractionProgress(null);
-    setPendingVideoFile(null);
+  const runAiAnalysis = async ({ frames, frameTimestamps, poseMetrics, type, youPersonIndex }) => {
     setAnalyzedVideoType(type);
-
     setAnalyzing(true);
     setAnalysisError("");
     try {
       const reply = await getChatReply({
         messages: [{ role: "user", content: lang === "en" ? "Analyze my video." : "Videomu analiz et." }],
         images: frames,
+        frameTimestamps,
         poseMetrics,
         videoType: type,
+        youPersonIndex,
         reportMode: true,
         profile: profileInfo,
         entries,
@@ -174,6 +162,57 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const startAnalysis = async () => {
+    if (!pendingVideoFile) return;
+    const type = videoType;
+    setExtracting(true);
+    setExtractionProgress({ phase: "probe", done: 0, total: 1 });
+    setVideoFrames([]);
+
+    let frames, framesPeople, frameTimestamps;
+    try {
+      const result = await extractFramesFromVideo(pendingVideoFile, {
+        onProgress: (p) => {
+          setExtractionProgress(p);
+          if (p.phase === "final" && p.frame) {
+            setVideoFrames((prev) => [...prev, p.frame]);
+          }
+        },
+      });
+      frames = result.frames;
+      framesPeople = result.framesPeople;
+      frameTimestamps = result.frameTimestamps;
+      setVideoFrames(frames);
+    } catch (err) {
+      setVideoError(c("videoReadError", lang));
+      setExtracting(false);
+      setExtractionProgress(null);
+      setPendingVideoFile(null);
+      return;
+    }
+    setExtracting(false);
+    setExtractionProgress(null);
+    setPendingVideoFile(null);
+
+    const pickFrameIdx = framesPeople.findIndex((p) => p.length > 1);
+    if (type === "Sparring" && pickFrameIdx !== -1) {
+      setPendingPick({ framesPeople, frameTimestamps, pickFrameIdx, frames, type });
+      return;
+    }
+
+    const landmarksSequence = resolveSinglePersonSequence(framesPeople);
+    const poseMetrics = computePoseMetrics(landmarksSequence, lang);
+    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, type, youPersonIndex: null });
+  };
+
+  const choosePerson = async (personIndex) => {
+    const { framesPeople, frameTimestamps, pickFrameIdx, frames, type } = pendingPick;
+    setPendingPick(null);
+    const landmarksSequence = linkPersonAcrossFrames(framesPeople, personIndex, pickFrameIdx);
+    const poseMetrics = computePoseMetrics(landmarksSequence, lang);
+    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, type, youPersonIndex: personIndex });
   };
 
   const saveToJournal = async () => {
@@ -272,7 +311,31 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
         </div>
       )}
 
-      {!extracting && !pendingVideoFile && videoFrames.length > 0 && (
+      {pendingPick && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 mb-3">
+          <p className="text-neutral-200 text-sm font-medium mb-1">{c("whoAreYouTitle", lang)}</p>
+          <p className="text-neutral-500 text-xs mb-3">{c("whoAreYouSubtitle", lang)}</p>
+          <img
+            src={`data:image/jpeg;base64,${pendingPick.frames[pendingPick.pickFrameIdx]}`}
+            alt=""
+            className="w-full rounded-lg border border-neutral-800 mb-3"
+          />
+          <div className="flex gap-2">
+            {[0, 1].map((personIndex) => (
+              <button
+                key={personIndex}
+                onClick={() => choosePerson(personIndex)}
+                className="flex-1 flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded-lg py-2.5 transition-colors"
+              >
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PERSON_COLOR_HEX[personIndex] }} />
+                {(PERSON_COLOR_NAME[lang] || PERSON_COLOR_NAME.tr)[personIndex]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!extracting && !pendingVideoFile && !pendingPick && videoFrames.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto mb-3">
           {videoFrames.map((f, i) => (
             <img key={i} src={`data:image/jpeg;base64,${f}`} alt="" className="w-20 h-20 object-cover rounded-lg shrink-0 border border-neutral-800" />
@@ -313,7 +376,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
         </div>
       )}
 
-      {!pendingVideoFile && !extracting && !analyzing && !analysis && (
+      {!pendingVideoFile && !extracting && !pendingPick && !analyzing && !analysis && (
         <p className="text-neutral-700 text-xs text-center py-6">{c("emptyState", lang)}</p>
       )}
 
@@ -329,7 +392,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
         ) : (
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={busy || !!pendingVideoFile}
+            disabled={busy || !!pendingVideoFile || !!pendingPick}
             className="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
           >
             <Video size={16} />
