@@ -5,8 +5,10 @@ import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coa
 // Video analysis sends many images plus a longer report-mode reply request,
 // which can take Claude a while to generate. Vercel kills the function at
 // its default timeout with a bare 502 (no error body) if this isn't raised.
+// Raised further to leave room for the one auto-continuation call below,
+// which can add a second full generation round on top of the first.
 export const config = {
-  maxDuration: 60,
+  maxDuration: 120,
 };
 
 const MODEL = "claude-sonnet-5";
@@ -43,8 +45,8 @@ const VIDEO_TYPE_GUIDANCE = {
 };
 
 const REPORT_MODE_INSTRUCTIONS = {
-  tr: "\n\nBu bir video analiz RAPORU isteği, sohbet değil — 'Merhaba', 'videona baktım', 'harika bir soru' gibi herhangi bir sohbet havası girişi/karşılaması KULLANMA, direkt yapılandırılmış analize başla. Cevabını şu üç başlıkla düzenle, her başlığı ayrı bir satırda düz metin olarak yaz (yıldız ya da # kullanma), altına ilgili paragrafı ekle: 'Duruş ve Guard', 'Denge ve Vücut Açısı', 'Öneriler ve Drilller'. Toplam uzunluk üç başlık arasında dağılmış şekilde yaklaşık 450-600 kelime olsun — kapsamlı olsun ama yoğun ve öz yaz, tekrar ya da doldurma cümle kullanma; bu sınırı aşma, cevap yarıda kesilmesin diye buna kesinlikle uy.",
-  en: "\n\nThis is a video analysis REPORT request, not a chat — do NOT use any conversational opener or greeting ('Hey', 'I looked at your video', 'great question'), go straight into the structured analysis. Organize your reply under these three headings, each on its own plain-text line (no asterisks or #), with the relevant paragraph beneath: 'Stance and Guard', 'Balance and Body Angle', 'Suggestions and Drills'. Keep the total length to roughly 450-600 words spread across the three headings — thorough but tightly written, no repetition or filler; stay within this so the reply never gets cut off mid-sentence.",
+  tr: "\n\nBu bir video analiz RAPORU isteği, sohbet değil — 'Merhaba', 'videona baktım', 'harika bir soru' gibi herhangi bir sohbet havası girişi/karşılaması KULLANMA, direkt yapılandırılmış analize başla. Cevabını şu üç başlıkla düzenle, her başlığı ayrı bir satırda düz metin olarak yaz (yıldız ya da # kullanma), altına ilgili paragrafı ekle: 'Duruş ve Guard', 'Denge ve Vücut Açısı', 'Öneriler ve Drilller'. Toplam uzunluk üç başlık arasında dağılmış şekilde yaklaşık 350-450 kelime olsun — kapsamlı olsun ama yoğun ve öz yaz, tekrar ya da doldurma cümle kullanma; bu sınırı aşma, cevap yarıda kesilmesin diye buna kesinlikle uy.",
+  en: "\n\nThis is a video analysis REPORT request, not a chat — do NOT use any conversational opener or greeting ('Hey', 'I looked at your video', 'great question'), go straight into the structured analysis. Organize your reply under these three headings, each on its own plain-text line (no asterisks or #), with the relevant paragraph beneath: 'Stance and Guard', 'Balance and Body Angle', 'Suggestions and Drills'. Keep the total length to roughly 350-450 words spread across the three headings — thorough but tightly written, no repetition or filler; stay within this so the reply never gets cut off mid-sentence.",
 };
 
 const VIDEO_INSTRUCTIONS = {
@@ -190,38 +192,62 @@ export default async function handler(req, res) {
     reportModeLine +
     (INSIGHT_INSTRUCTIONS[lang] || INSIGHT_INSTRUCTIONS.tr);
 
-  try {
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: hasImages ? 3200 : 500,
-        system,
-        messages: anthropicMessages,
-      }),
-    });
+  const maxTokens = hasImages ? 4096 : 500;
+  // A length target keeps replies well under this in the normal case, but
+  // if the model still gets cut off mid-thought (stop_reason "max_tokens"),
+  // one automatic continuation call finishes the thought instead of
+  // shipping a truncated reply to the user — a target alone is a hint the
+  // model can overshoot, this is what actually guarantees completeness.
+  const MAX_CONTINUATIONS = 1;
 
-    if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text();
-      res.status(502).json({ error: `Anthropic API error: ${errText}` });
-      return;
+  try {
+    let convo = anthropicMessages;
+    let combinedText = "";
+    let stopReason = null;
+
+    for (let attempt = 0; attempt <= MAX_CONTINUATIONS; attempt++) {
+      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: maxTokens,
+          system,
+          messages: convo,
+        }),
+      });
+
+      if (!anthropicRes.ok) {
+        const errText = await anthropicRes.text();
+        res.status(502).json({ error: `Anthropic API error: ${errText}` });
+        return;
+      }
+
+      const data = await anthropicRes.json();
+      const textPart = (data?.content || [])
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+      combinedText += textPart;
+      stopReason = data?.stop_reason;
+
+      if (stopReason !== "max_tokens" || attempt === MAX_CONTINUATIONS) break;
+
+      convo = [
+        ...convo,
+        { role: "assistant", content: textPart },
+        { role: "user", content: lang === "en" ? "Continue exactly where you left off, don't repeat anything." : "Kaldığın yerden aynen devam et, hiçbir şeyi tekrar etme." },
+      ];
     }
 
-    const data = await anthropicRes.json();
-    const raw = (data?.content || [])
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-
-    const [replyPart, insightPart] = raw.split(INSIGHT_MARKER);
-    const reply = (replyPart || "").trim();
-    const insight = (insightPart || "").trim();
+    const raw = combinedText.trim();
+    const markerIndex = raw.indexOf(INSIGHT_MARKER);
+    const reply = (markerIndex === -1 ? raw : raw.slice(0, markerIndex)).trim();
+    const insight = markerIndex === -1 ? "" : raw.slice(markerIndex + INSIGHT_MARKER.length).trim();
 
     if (!reply) {
       res.status(502).json({ error: "Coach returned an empty response" });
