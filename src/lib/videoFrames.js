@@ -1,3 +1,5 @@
+import { detectAndDrawPose, computePoseMetrics } from "./poseAnalysis";
+
 function waitFor(target, event) {
   return new Promise((resolve, reject) => {
     const onOk = () => {
@@ -33,7 +35,7 @@ function motionScore(a, b) {
   return sum;
 }
 
-export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72 } = {}) {
+export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, lang = "tr" } = {}) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.muted = true;
@@ -110,12 +112,19 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
 
     const selected = [first, ...picked, last].filter(Boolean).sort((a, b) => a.t - b.t);
 
-    // Second pass: redraw only the selected timestamps at full resolution.
+    // Second pass: redraw only the selected timestamps at full resolution,
+    // running real pose detection on each so the AI gets both a skeleton
+    // overlay (visual) and measured landmark data (numeric), not just a
+    // still image to guess from. Pose detection is best-effort — if it
+    // fails or the model can't load, frames still go out as plain images.
     const frames = [];
+    const landmarksSequence = [];
     for (const c of selected) {
       video.currentTime = c.t;
       await waitFor(video, "seeked");
       ctx.drawImage(video, 0, 0, width, height);
+      const landmarks = await detectAndDrawPose(canvas);
+      landmarksSequence.push(landmarks);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       frames.push(dataUrl.split(",")[1]);
     }
@@ -124,7 +133,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
       throw new Error("No frames extracted");
     }
 
-    return frames;
+    return { frames, poseMetrics: computePoseMetrics(landmarksSequence, lang) };
   } finally {
     URL.revokeObjectURL(url);
     document.body.removeChild(video);

@@ -33,6 +33,7 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [videoFrames, setVideoFrames] = useState([]);
+  const [poseMetrics, setPoseMetrics] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [videoError, setVideoError] = useState("");
   const [videoReplyIds, setVideoReplyIds] = useState(() => new Set());
@@ -66,8 +67,9 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
     setVideoError("");
     setExtracting(true);
     try {
-      const frames = await extractFramesFromVideo(file);
+      const { frames, poseMetrics: metrics } = await extractFramesFromVideo(file, { lang });
       setVideoFrames(frames);
+      setPoseMetrics(metrics);
     } catch (err) {
       setVideoError(c("videoReadError", lang));
     } finally {
@@ -78,12 +80,14 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
   const send = async () => {
     const text = input.trim();
     const framesToSend = videoFrames;
+    const metricsToSend = poseMetrics;
     if (!text && framesToSend.length === 0) return;
     if (sending) return;
 
     setError("");
     setInput("");
     setVideoFrames([]);
+    setPoseMetrics("");
     setSending(true);
 
     const displayText =
@@ -100,6 +104,7 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
       const reply = await getChatReply({
         messages: history.map((m) => ({ role: m.role, content: m.content })),
         images: framesToSend,
+        poseMetrics: metricsToSend,
         caption: text,
         profile: profileInfo,
         entries,
@@ -114,6 +119,7 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
       setError(c("error", lang));
       setInput(text);
       setVideoFrames(framesToSend);
+      setPoseMetrics(metricsToSend);
     } finally {
       setSending(false);
     }
@@ -198,7 +204,14 @@ export default function CoachChat({ userId, profileInfo, entries, lang, onSaveVi
           <span className="text-neutral-500 text-[11px] whitespace-nowrap">
             {videoFrames.length} {c("framesReady", lang)}
           </span>
-          <button onClick={() => setVideoFrames([])} aria-label="Clear video" className="ml-auto shrink-0">
+          <button
+            onClick={() => {
+              setVideoFrames([]);
+              setPoseMetrics("");
+            }}
+            aria-label="Clear video"
+            className="ml-auto shrink-0"
+          >
             <X size={14} className="text-neutral-600" />
           </button>
         </div>
