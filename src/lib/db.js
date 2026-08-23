@@ -48,6 +48,7 @@ function rowToEntry(row) {
     blocks: row.blocks || [],
     categories: row.categories || [],
     hasVideo: row.has_video,
+    frames: row.frames || [],
     planKey: row.plan_key,
     createdAt: new Date(row.created_at).getTime(),
   };
@@ -76,6 +77,7 @@ export async function addJournalEntry(userId, entry) {
       blocks: entry.blocks || [],
       categories: entry.categories || [],
       has_video: entry.hasVideo || false,
+      frames: entry.frames || [],
       plan_key: entry.planKey || null,
     })
     .select()
@@ -86,6 +88,11 @@ export async function addJournalEntry(userId, entry) {
 
 export async function deleteJournalEntryByPlanKey(userId, planKey) {
   const { error } = await supabase.from("journal_entries").delete().eq("user_id", userId).eq("plan_key", planKey);
+  if (error) throw error;
+}
+
+export async function deleteJournalEntry(userId, id) {
+  const { error } = await supabase.from("journal_entries").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
 }
 
