@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Video, X, BookmarkPlus, MessageSquarePlus } from "lucide-react";
 import { addChatMessage } from "./lib/db";
 import { getChatReply } from "./lib/coach";
 import { extractFramesFromVideo } from "./lib/videoFrames";
 import { resolveSinglePersonSequence, linkPersonAcrossFrames, buildPoseTable, drawMotionTrail } from "./lib/poseAnalysis";
+import FrameFlipbook from "./FrameFlipbook";
 
 const VIDEO_TYPES = ["Gölge Boksu", "Torba Çalışması", "Sparring", "Teknik Çalışma"];
 const VIDEO_TYPE_LABELS = {
@@ -94,32 +95,6 @@ function ReportText({ text }) {
       })}
     </div>
   );
-}
-
-// Plays the frames actually sent for analysis back-and-forth in a loop —
-// a rough stop-motion replay of the action, closer to what the user
-// pictured than a single flattened composite image.
-function FrameFlipbook({ frames }) {
-  const [index, setIndex] = useState(0);
-  const dirRef = useRef(1);
-
-  useEffect(() => {
-    if (!frames || frames.length < 2) return undefined;
-    const id = setInterval(() => {
-      setIndex((prev) => {
-        let next = prev + dirRef.current;
-        if (next >= frames.length - 1 || next <= 0) {
-          dirRef.current *= -1;
-          next = Math.max(0, Math.min(frames.length - 1, next));
-        }
-        return next;
-      });
-    }, 220);
-    return () => clearInterval(id);
-  }, [frames]);
-
-  if (!frames || frames.length === 0) return null;
-  return <img src={`data:image/jpeg;base64,${frames[index]}`} alt="" className="w-full rounded-lg border border-neutral-800" />;
 }
 
 export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis, onSentToChat }) {
@@ -273,7 +248,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setSaving(true);
     setSaveError("");
     try {
-      await onSaveVideoAnalysis(analysis);
+      await onSaveVideoAnalysis(analysis, videoFrames);
       setSaved(true);
     } catch (e) {
       setSaveError(c("saveError", lang));

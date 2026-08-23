@@ -9,6 +9,7 @@ import {
   getJournalEntries,
   addJournalEntry,
   deleteJournalEntryByPlanKey,
+  deleteJournalEntry,
   resetJournalEntries,
   getCommunityPosts,
   addCommunityPost,
@@ -24,6 +25,7 @@ import { getMatchNews } from "./lib/matchNews";
 import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
 import VideoAnalysisTab from "./VideoAnalysisTab";
+import FrameFlipbook from "./FrameFlipbook";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
 const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
@@ -698,7 +700,7 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
   );
 }
 
-function JournalTab({ entries, onAddClick, onShareEntry, lang }) {
+function JournalTab({ entries, onAddClick, onShareEntry, onDeleteEntry, lang }) {
   const { current: streak, longest: longestStreak } = computeStreaks(entries);
   const weekEntries = entries.filter((e) => e.createdAt >= startOfWeek(Date.now()));
   const [sharedEntryIds, setSharedEntryIds] = useState(() => new Set());
@@ -731,19 +733,34 @@ function JournalTab({ entries, onAddClick, onShareEntry, lang }) {
                 <span className="text-neutral-100 text-sm font-medium">
                   {e.label} · {entryCategoryLabel(e, lang)}
                 </span>
-                <span className="text-neutral-500 text-xs">{e.duration}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-neutral-500 text-xs">{e.duration}</span>
+                  <button
+                    onClick={() => onDeleteEntry(e.id)}
+                    aria-label="Delete entry"
+                    className="text-neutral-600 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
               {e.planKey && (
                 <span className="inline-block text-[10px] text-red-500 mb-1.5">{t(lang, "markedFromCalendar")}</span>
               )}
 
               {e.hasVideo && (
-                <div className="relative bg-neutral-950 border border-neutral-800 rounded-lg h-20 flex items-center justify-center mb-2">
-                  <Video size={20} className="text-neutral-600" />
-                  <span className="absolute top-1.5 left-1.5 text-[10px] bg-red-950 text-red-400 border border-red-900 px-1.5 py-0.5 rounded">
-                    {t(lang, "newBadge")}
-                  </span>
-                </div>
+                e.frames?.length > 1 ? (
+                  <div className="mb-2">
+                    <FrameFlipbook frames={e.frames} className="w-full rounded-lg border border-neutral-800 max-h-48 object-cover" />
+                  </div>
+                ) : (
+                  <div className="relative bg-neutral-950 border border-neutral-800 rounded-lg h-20 flex items-center justify-center mb-2">
+                    <Video size={20} className="text-neutral-600" />
+                    <span className="absolute top-1.5 left-1.5 text-[10px] bg-red-950 text-red-400 border border-red-900 px-1.5 py-0.5 rounded">
+                      {t(lang, "newBadge")}
+                    </span>
+                  </div>
+                )
               )}
 
               {e.blocks?.length > 0 && (
@@ -2391,7 +2408,7 @@ export default function TheCornerApp() {
     setShowForm(false);
   };
 
-  const saveVideoAnalysis = async (note) => {
+  const saveVideoAnalysis = async (note, frames) => {
     const entry = await addJournalEntry(session.user.id, {
       label: t(lang, "videoAnalysisLabel"),
       type: "Teknik",
@@ -2400,8 +2417,19 @@ export default function TheCornerApp() {
       blocks: [],
       tags: [],
       hasVideo: true,
+      frames: frames || [],
     });
     setEntries((prev) => [entry, ...prev]);
+  };
+
+  const deleteEntry = async (id) => {
+    const prevEntries = entries;
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+    try {
+      await deleteJournalEntry(session.user.id, id);
+    } catch (e) {
+      setEntries(prevEntries);
+    }
   };
 
   const toggleLike = async (id) => {
@@ -2563,7 +2591,7 @@ export default function TheCornerApp() {
         showForm ? (
           <NewEntryForm onSubmit={addEntry} onCancel={() => setShowForm(false)} lang={lang} />
         ) : (
-          <JournalTab entries={entries} onAddClick={() => setShowForm(true)} onShareEntry={shareJournalEntry} lang={lang} />
+          <JournalTab entries={entries} onAddClick={() => setShowForm(true)} onShareEntry={shareJournalEntry} onDeleteEntry={deleteEntry} lang={lang} />
         )
       ) : tab === "coach" ? (
         <CoachTab userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
