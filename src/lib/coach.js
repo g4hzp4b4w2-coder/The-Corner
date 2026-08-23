@@ -20,11 +20,12 @@ async function callApi(path, payload) {
   return res.json();
 }
 
-export function getChatReply({ messages, images, frameTimestamps, poseMetrics, videoType, youPersonIndex, reportMode, caption, profile, entries, lang }) {
+export function getChatReply({ messages, images, frameTimestamps, hasMotionTrail, poseMetrics, videoType, youPersonIndex, reportMode, caption, profile, entries, lang }) {
   return callApi("/api/coach-chat", {
     messages,
     images,
     frameTimestamps,
+    hasMotionTrail,
     poseMetrics,
     videoType,
     youPersonIndex,

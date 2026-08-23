@@ -3,7 +3,12 @@ import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from ".
 import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 const MODEL = "claude-sonnet-5";
-const MAX_IMAGES = 18;
+const MAX_IMAGES = 20;
+
+const MOTION_TRAIL_LABEL = {
+  tr: "Bu son görsel bir fotoğraf karesi değil — seçilen kareler boyunca iskeletin üst üste bindirilmesiyle oluşturulan bir 'hareket izi' kompoziti. En soluk çizgi klibin başındaki, en net/koyu çizgi sonundaki pozisyonu gösteriyor; aradaki geçişi tek bakışta görebilirsin. Bunu, hareketin genel akışı/yönü hakkında yorum yapmak için kullan.",
+  en: "This last image isn't a video frame — it's a 'motion trail' composite made by overlaying the tracked skeleton across the selected frames. The faintest lines are the start of the clip, the boldest/darkest are the end, so you can see the whole flow of movement at a glance. Use it to comment on the overall flow/direction of the movement.",
+};
 const INSIGHT_MARKER = "===INSIGHT===";
 
 const INSIGHT_INSTRUCTIONS = {
@@ -36,8 +41,8 @@ const REPORT_MODE_INSTRUCTIONS = {
 };
 
 const VIDEO_INSTRUCTIONS = {
-  tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var, HER KARENİN HEMEN ÖNCESİNDE o karenin videodaki gerçek saniyesi yazıyor (örn. \"Video zamanı: 3.2s\"). Bu çok önemli: yorumunda ASLA \"1. karede\", \"4. karede\" gibi kare numarası kullanma — bunun yerine gerçek saniyeyi kullan (örn. \"videonun 3.2. saniyesinde guard düştü\", \"klibin başında...\", \"9. saniye civarında...\"). Bu, tek tek fotoğraflara değil, tek bir sürekli videoya baktığını gösterir. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren renkli çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil; kadrajda iki kişi varsa (örn. sparring) her biri farklı renkte çizilir. Bu sefer kısa tutma — videoyu baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın klip boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda gerçek takip verisinden çıkarılmış sayısal ölçümler varsa, bunları görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
-  en: "\n\nThis message includes multiple sequential frames from the user's video, and EACH FRAME IS IMMEDIATELY PRECEDED by the real video timestamp it was taken at (e.g. \"Video time: 3.2s\"). This matters: NEVER refer to \"frame 1\" or \"frame 4\" in your analysis — use the real second instead (e.g. \"your guard dropped around the 3.2-second mark\", \"early in the clip...\", \"around the 9-second point...\"). This makes it clear you're looking at one continuous video, not a stack of disconnected photos. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes). The frames may have colored lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess; if two people are in frame (e.g. sparring), each is drawn in a different color. Don't keep it short this time — go through the whole clip and write a longer, structured analysis: (1) how stance and guard change across the clip, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If numeric measurements from real tracking data are provided below, prioritize and directly reference them over your own visual guess (e.g. \"based on the tracking data...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
+  tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var, HER KARENİN HEMEN ÖNCESİNDE o karenin videodaki gerçek saniyesi yazıyor (örn. \"Video zamanı: 3.2s\"). Bu çok önemli: yorumunda ASLA \"1. karede\", \"4. karede\" gibi kare numarası kullanma — bunun yerine gerçek saniyeyi kullan (örn. \"videonun 3.2. saniyesinde guard düştü\", \"klibin başında...\", \"9. saniye civarında...\"). Bu, tek tek fotoğraflara değil, tek bir sürekli videoya baktığını gösterir. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren renkli çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil; kadrajda iki kişi varsa (örn. sparring) her biri farklı renkte çizilir. Bu sefer kısa tutma — videoyu baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın klip boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda videonun TAMAMINDAN örneklenmiş, saniye saniye gerçek takip verisi (bir tablo) varsa — bu sadece gönderilen birkaç kareyi değil, klibin başından sonuna kadar ölçülmüş veriyi kapsıyor — bunu görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre 5. saniyede...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
+  en: "\n\nThis message includes multiple sequential frames from the user's video, and EACH FRAME IS IMMEDIATELY PRECEDED by the real video timestamp it was taken at (e.g. \"Video time: 3.2s\"). This matters: NEVER refer to \"frame 1\" or \"frame 4\" in your analysis — use the real second instead (e.g. \"your guard dropped around the 3.2-second mark\", \"early in the clip...\", \"around the 9-second point...\"). This makes it clear you're looking at one continuous video, not a stack of disconnected photos. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes). The frames may have colored lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess; if two people are in frame (e.g. sparring), each is drawn in a different color. Don't keep it short this time — go through the whole clip and write a longer, structured analysis: (1) how stance and guard change across the clip, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If a table of real tracking data sampled across the WHOLE clip is provided below — covering the entire video, not just the handful of frames you were sent — prioritize and directly reference it over your own visual guess (e.g. \"based on the tracking data, around second 5...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
 };
 
 const YOU_PERSON_NOTE = {
@@ -124,7 +129,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { messages, images, frameTimestamps, poseMetrics, videoType, youPersonIndex, reportMode, caption, profile, entries, lang = "tr" } = req.body || {};
+  const { messages, images, frameTimestamps, hasMotionTrail, poseMetrics, videoType, youPersonIndex, reportMode, caption, profile, entries, lang = "tr" } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages is required" });
     return;
@@ -144,9 +149,12 @@ export default async function handler(req, res) {
   if (hasImages) {
     const clippedImages = images.slice(0, MAX_IMAGES);
     const clippedTimestamps = Array.isArray(frameTimestamps) ? frameTimestamps.slice(0, MAX_IMAGES) : [];
+    const trailIndex = hasMotionTrail ? clippedImages.length - 1 : -1;
     const imageBlocks = clippedImages.flatMap((data, i) => {
       const blocks = [];
-      if (clippedTimestamps[i] !== undefined) {
+      if (i === trailIndex) {
+        blocks.push({ type: "text", text: MOTION_TRAIL_LABEL[lang] || MOTION_TRAIL_LABEL.tr });
+      } else if (clippedTimestamps[i] !== undefined) {
         blocks.push({ type: "text", text: lang === "en" ? `Video time: ${clippedTimestamps[i]}s` : `Video zamanı: ${clippedTimestamps[i]}s` });
       }
       blocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });

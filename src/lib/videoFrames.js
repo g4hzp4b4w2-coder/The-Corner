@@ -42,7 +42,10 @@ function pixelMotionScore(a, b) {
 // usually length 1, length 2 for a two-person clip like sparring). Metrics
 // aren't computed here because a two-person clip needs the caller to ask
 // "which one is you" first — see resolveSinglePersonSequence /
-// linkPersonAcrossFrames / computePoseMetrics in poseAnalysis.js.
+// linkPersonAcrossFrames / buildPoseTable / drawMotionTrail in
+// poseAnalysis.js. probeSamples carries whole-clip landmark samples (from
+// the probe pass, single-person) for building a denser numeric picture of
+// the video than just the handful of frames actually sent as images.
 export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0.72, onProgress } = {}) {
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
@@ -110,6 +113,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
 
     const candidateCount = Math.min(30, Math.max(Math.round(targetCount * 2.5), 18));
     const candidates = [];
+    const probeSamples = [];
     let prevLandmarks = null;
     let prevPixelData = null;
     for (let i = 0; i < candidateCount; i++) {
@@ -124,6 +128,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
         const landmarks = people[0] || null;
         score = poseMotionScore(prevLandmarks, landmarks);
         prevLandmarks = landmarks;
+        probeSamples.push({ t, landmarks });
       } else {
         const data = probeCtx.getImageData(0, 0, probeW, probeH).data;
         score = prevPixelData ? pixelMotionScore(data, prevPixelData) : 0;
@@ -177,7 +182,7 @@ export async function extractFramesFromVideo(file, { maxWidth = 512, quality = 0
       throw new Error("No frames extracted");
     }
 
-    return { frames, framesPeople, frameTimestamps };
+    return { frames, framesPeople, frameTimestamps, probeSamples, width, height };
   } finally {
     URL.revokeObjectURL(url);
     document.body.removeChild(video);
