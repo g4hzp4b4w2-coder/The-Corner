@@ -52,6 +52,14 @@ const COPY = {
   sentToChat: { tr: "Sohbete eklendi", en: "Added to chat" },
   sendError: { tr: "Gönderilemedi, tekrar dene.", en: "Couldn't send, try again." },
   emptyState: { tr: "Henüz analiz yok. Bir video yükleyerek başla.", en: "No analysis yet. Start by uploading a video." },
+  motionTrailTitle: { tr: "Hareket izi", en: "Motion trail" },
+  motionTrailCaption: {
+    tr: "Klip boyunca izlenen iskeletin üst üste bindirilmiş hali — soluk çizgi başlangıcı, koyu çizgi bitişi gösteriyor.",
+    en: "The tracked skeleton overlaid across the clip — the faintest line is the start, the boldest is the end.",
+  },
+  metricsTitle: { tr: "Takip verisi", en: "Tracking data" },
+  showMetrics: { tr: "Ölçüm verisini göster", en: "Show tracking data" },
+  hideMetrics: { tr: "Ölçüm verisini gizle", en: "Hide tracking data" },
   whoAreYouTitle: { tr: "Kadrajda iki kişi var — hangisi sensin?", en: "Two people are in frame — which one is you?" },
   whoAreYouSubtitle: {
     tr: "Analizi doğru kişiye göre yapabilmemiz için renk seç.",
@@ -104,6 +112,9 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
   const [analysis, setAnalysis] = useState(null);
   const [analysisError, setAnalysisError] = useState("");
   const [analyzedVideoType, setAnalyzedVideoType] = useState("");
+  const [analysisTrailImage, setAnalysisTrailImage] = useState(null);
+  const [analysisMetrics, setAnalysisMetrics] = useState("");
+  const [showMetrics, setShowMetrics] = useState(false);
 
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,6 +135,9 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setAnalysis(null);
     setAnalysisError("");
     setAnalyzedVideoType("");
+    setAnalysisTrailImage(null);
+    setAnalysisMetrics("");
+    setShowMetrics(false);
     setSaved(false);
     setSaveError("");
     setSentToChat(false);
@@ -141,6 +155,8 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
 
   const runAiAnalysis = async ({ frames, frameTimestamps, poseMetrics, motionTrailImage, type, youPersonIndex }) => {
     setAnalyzedVideoType(type);
+    setAnalysisTrailImage(motionTrailImage || null);
+    setAnalysisMetrics(poseMetrics || "");
     setAnalyzing(true);
     setAnalysisError("");
     try {
@@ -366,6 +382,34 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
             <span className="text-neutral-500 text-[11px]">{videoTypeLabel(analyzedVideoType, lang)}</span>
           </div>
           <ReportText text={analysis} />
+
+          {analysisTrailImage && (
+            <div className="mt-3 pt-3 border-t border-neutral-800">
+              <p className="text-neutral-400 text-[11px] font-medium mb-1.5">{c("motionTrailTitle", lang)}</p>
+              <img
+                src={`data:image/jpeg;base64,${analysisTrailImage}`}
+                alt={c("motionTrailTitle", lang)}
+                className="w-full rounded-lg border border-neutral-800 mb-1.5"
+              />
+              <p className="text-neutral-600 text-[10px] leading-relaxed">{c("motionTrailCaption", lang)}</p>
+            </div>
+          )}
+
+          {analysisMetrics && (
+            <div className="mt-3 pt-3 border-t border-neutral-800">
+              <button
+                onClick={() => setShowMetrics((v) => !v)}
+                className="text-neutral-400 text-[11px] font-medium underline underline-offset-2"
+              >
+                {showMetrics ? c("hideMetrics", lang) : c("showMetrics", lang)}
+              </button>
+              {showMetrics && (
+                <pre className="mt-2 text-neutral-500 text-[10px] leading-relaxed whitespace-pre-wrap break-words bg-neutral-950 border border-neutral-800 rounded-lg p-2 max-h-56 overflow-y-auto">
+                  {analysisMetrics}
+                </pre>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800">
             <button
