@@ -15,6 +15,15 @@ function getVision() {
   return visionPromise;
 }
 
+const MIN_VISIBILITY = 0.5;
+
+function isVisible(point) {
+  // MediaPipe marks how confident it is that a landmark is actually visible
+  // (not occluded / off-frame). Treat a missing field as visible rather than
+  // fail closed, in case a future model version doesn't populate it.
+  return !!point && (point.visibility === undefined || point.visibility >= MIN_VISIBILITY);
+}
+
 // A pose session wraps one PoseLandmarker instance running in MediaPipe's
 // "VIDEO" mode, which — unlike treating every frame as an isolated image —
 // tracks temporal continuity between calls (smoother, more stable joint
@@ -22,6 +31,10 @@ function getVision() {
 // requires strictly increasing timestamps across calls to the same
 // instance; we don't need these to match the actual video time, just to
 // keep increasing, so each session tracks its own synthetic counter.
+//
+// numPoses is 2 so two-person clips (sparring) get both people tracked
+// instead of one skeleton flickering between whoever the model happens to
+// pick up that frame.
 export async function createPoseSession() {
   const { PoseLandmarker } = await import("@mediapipe/tasks-vision");
   const vision = await getVision();
@@ -31,21 +44,21 @@ export async function createPoseSession() {
       delegate: "GPU",
     },
     runningMode: "VIDEO",
-    numPoses: 1,
+    numPoses: 2,
   });
 
   let ts = 0;
 
   return {
-    // Returns the 33-point landmark array for this frame, or null if no
-    // pose was found or detection failed — never throws.
-    detect(imageSource) {
+    // Returns an array of landmark sets, one per person MediaPipe found in
+    // this frame (0, 1, or 2). Never throws — returns [] on failure.
+    detectAll(imageSource) {
       ts += 33;
       try {
         const result = landmarker.detectForVideo(imageSource, ts);
-        return result?.landmarks?.[0] || null;
+        return result?.landmarks || [];
       } catch (e) {
-        return null;
+        return [];
       }
     },
     close() {
@@ -59,16 +72,20 @@ export async function createPoseSession() {
 }
 
 // Sum of per-joint displacement between two landmark sets (normalized 0-1
-// coordinates), used to score how much real body motion happened between
-// two frames — a much more direct signal than comparing raw pixels, which
-// can be thrown off by lighting, camera shake, or background movement.
+// coordinates), ignoring points MediaPipe wasn't confident about — used to
+// score how much real body motion happened between two frames, a much more
+// direct signal than comparing raw pixels.
 export function poseMotionScore(a, b) {
   if (!a || !b) return 0;
   let sum = 0;
+  let counted = 0;
   for (let i = 0; i < a.length; i++) {
-    sum += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+    if (isVisible(a[i]) && isVisible(b[i])) {
+      sum += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+      counted++;
+    }
   }
-  return sum;
+  return counted > 0 ? sum : 0;
 }
 
 // Pairs of landmark indices to connect when drawing the skeleton.
@@ -88,31 +105,100 @@ const CONNECTIONS = [
   [26, 28],
 ];
 
-export function drawSkeleton(canvas, landmarks) {
-  if (!landmarks) return;
+const PERSON_COLORS = ["#22d3ee", "#f59e0b"];
+
+// Draws every detected person's skeleton onto the canvas, each in its own
+// color, and skips any joint/connection MediaPipe wasn't confident about
+// instead of drawing a misplaced point during fast, blurry motion.
+export function drawSkeletons(canvas, peopleLandmarks) {
+  if (!peopleLandmarks || peopleLandmarks.length === 0) return;
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
 
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "#22d3ee";
-  ctx.fillStyle = "#22d3ee";
+  peopleLandmarks.forEach((landmarks, personIndex) => {
+    const color = PERSON_COLORS[personIndex % PERSON_COLORS.length];
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
 
-  CONNECTIONS.forEach(([a, b]) => {
-    const pa = landmarks[a];
-    const pb = landmarks[b];
-    if (!pa || !pb) return;
-    ctx.beginPath();
-    ctx.moveTo(pa.x * w, pa.y * h);
-    ctx.lineTo(pb.x * w, pb.y * h);
-    ctx.stroke();
-  });
+    CONNECTIONS.forEach(([a, b]) => {
+      const pa = landmarks[a];
+      const pb = landmarks[b];
+      if (!isVisible(pa) || !isVisible(pb)) return;
+      ctx.beginPath();
+      ctx.moveTo(pa.x * w, pa.y * h);
+      ctx.lineTo(pb.x * w, pb.y * h);
+      ctx.stroke();
+    });
 
-  landmarks.forEach((p) => {
-    ctx.beginPath();
-    ctx.arc(p.x * w, p.y * h, 2.5, 0, Math.PI * 2);
-    ctx.fill();
+    landmarks.forEach((p) => {
+      if (!isVisible(p)) return;
+      ctx.beginPath();
+      ctx.arc(p.x * w, p.y * h, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
   });
+}
+
+function centroid(landmarks) {
+  const pts = landmarks.filter(isVisible);
+  if (pts.length === 0) return null;
+  return {
+    x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+    y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+  };
+}
+
+// Simplest case: exactly one person expected per frame, just take whoever
+// MediaPipe detected first.
+export function resolveSinglePersonSequence(framesPeople) {
+  return framesPeople.map((people) => (people && people[0]) || null);
+}
+
+// MediaPipe doesn't guarantee a person keeps the same array index between
+// frames, so when there are two people (sparring) we need our own light
+// tracking: starting from the frame where the user told us which one is
+// them, follow that identity across the rest of the clip by matching each
+// frame's closest body-centroid to the previous frame's — a simple,
+// dependency-free way to turn independent per-frame detections into one
+// consistent track.
+export function linkPersonAcrossFrames(framesPeople, startIndex, startFrameIdx) {
+  const linked = new Array(framesPeople.length).fill(null);
+  let prevCentroid = null;
+
+  for (let i = 0; i < framesPeople.length; i++) {
+    const people = framesPeople[i] || [];
+    if (people.length === 0) {
+      continue;
+    }
+
+    let chosenIdx;
+    if (i === startFrameIdx) {
+      chosenIdx = Math.min(startIndex, people.length - 1);
+    } else if (prevCentroid) {
+      let best = 0;
+      let bestDist = Infinity;
+      people.forEach((landmarks, idx) => {
+        const cen = centroid(landmarks);
+        if (!cen) return;
+        const d = Math.hypot(cen.x - prevCentroid.x, cen.y - prevCentroid.y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = idx;
+        }
+      });
+      chosenIdx = best;
+    } else {
+      chosenIdx = 0;
+    }
+
+    linked[i] = people[chosenIdx] || null;
+    const cen = linked[i] ? centroid(linked[i]) : null;
+    if (cen) prevCentroid = cen;
+  }
+
+  return linked;
 }
 
 function avg(arr) {
@@ -127,12 +213,14 @@ function trendWord(arr, lang) {
   return delta > 0 ? "yükseldi" : "düştü";
 }
 
+const REQUIRED_METRIC_POINTS = [11, 12, 15, 16, 27, 28];
+
 // Builds a short, honest text summary from real tracked landmarks across the
 // selected frames — meant to give the AI coach measured numbers to reason
 // about instead of only guessing from still images. Returns "" if there
-// isn't enough real pose data to say anything meaningful.
+// isn't enough reliable pose data to say anything meaningful.
 export function computePoseMetrics(landmarksSequence, lang) {
-  const frames = landmarksSequence.filter(Boolean);
+  const frames = landmarksSequence.filter((f) => f && REQUIRED_METRIC_POINTS.every((i) => isVisible(f[i])));
   if (frames.length < 2) return "";
 
   const guardLeft = frames.map((f) => f[11].y - f[15].y);
