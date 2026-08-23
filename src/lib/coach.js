@@ -20,8 +20,8 @@ async function callApi(path, payload) {
   return res.json();
 }
 
-export function getChatReply({ messages, images, caption, profile, entries, lang }) {
-  return callApi("/api/coach-chat", { messages, images, caption, profile, entries, lang });
+export function getChatReply({ messages, images, poseMetrics, caption, profile, entries, lang }) {
+  return callApi("/api/coach-chat", { messages, images, poseMetrics, caption, profile, entries, lang });
 }
 
 export function getWeeklyPlan({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang }) {
