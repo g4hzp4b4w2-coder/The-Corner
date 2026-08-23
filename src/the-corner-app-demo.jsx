@@ -327,18 +327,8 @@ const TAG_TONE = {
   good: "bg-emerald-950 text-emerald-400 border border-emerald-900",
 };
 
-function CornerMark({ width = 30, height = 17 }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 100 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Corner logosu">
-      <rect x="43" y="10" width="14" height="36" rx="1.5" fill="#dc2626" />
-      <path d="M43 18 L4 8" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M43 27 L4 26" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M43 37 L4 46" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M57 18 L96 8" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M57 27 L96 26" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M57 37 L96 46" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-    </svg>
-  );
+function CornerMark({ width = 30 }) {
+  return <img src="/logo-mark.png" width={width} style={{ height: "auto", display: "block" }} alt="The Corner logosu" />;
 }
 
 function BoxingGloveLoader({ size = 40, label, compact = false }) {
@@ -381,7 +371,7 @@ function Header({ lang, onToggleLang }) {
       />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <CornerMark width={32} height={18} />
+          <CornerMark width={32} />
           <div>
             <p
               className="text-neutral-100 text-lg leading-none tracking-wide"
