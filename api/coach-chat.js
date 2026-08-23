@@ -200,7 +200,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: hasImages ? 1700 : 500,
+        max_tokens: hasImages ? 2500 : 500,
         system,
         messages: anthropicMessages,
       }),
