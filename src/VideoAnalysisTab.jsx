@@ -3,7 +3,7 @@ import { Video, X, BookmarkPlus, MessageSquarePlus } from "lucide-react";
 import { addChatMessage } from "./lib/db";
 import { getChatReply } from "./lib/coach";
 import { extractFramesFromVideo } from "./lib/videoFrames";
-import { resolveSinglePersonSequence, linkPersonAcrossFrames, computePoseMetrics } from "./lib/poseAnalysis";
+import { resolveSinglePersonSequence, linkPersonAcrossFrames, buildPoseTable, drawMotionTrail } from "./lib/poseAnalysis";
 
 const VIDEO_TYPES = ["Gölge Boksu", "Torba Çalışması", "Sparring", "Teknik Çalışma"];
 const VIDEO_TYPE_LABELS = {
@@ -139,15 +139,17 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setVideoType(VIDEO_TYPES[0]);
   };
 
-  const runAiAnalysis = async ({ frames, frameTimestamps, poseMetrics, type, youPersonIndex }) => {
+  const runAiAnalysis = async ({ frames, frameTimestamps, poseMetrics, motionTrailImage, type, youPersonIndex }) => {
     setAnalyzedVideoType(type);
     setAnalyzing(true);
     setAnalysisError("");
     try {
+      const images = motionTrailImage ? [...frames, motionTrailImage] : frames;
       const reply = await getChatReply({
         messages: [{ role: "user", content: lang === "en" ? "Analyze my video." : "Videomu analiz et." }],
-        images: frames,
+        images,
         frameTimestamps,
+        hasMotionTrail: !!motionTrailImage,
         poseMetrics,
         videoType: type,
         youPersonIndex,
@@ -171,7 +173,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setExtractionProgress({ phase: "probe", done: 0, total: 1 });
     setVideoFrames([]);
 
-    let frames, framesPeople, frameTimestamps;
+    let frames, framesPeople, frameTimestamps, probeSamples, width, height;
     try {
       const result = await extractFramesFromVideo(pendingVideoFile, {
         onProgress: (p) => {
@@ -184,6 +186,9 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
       frames = result.frames;
       framesPeople = result.framesPeople;
       frameTimestamps = result.frameTimestamps;
+      probeSamples = result.probeSamples;
+      width = result.width;
+      height = result.height;
       setVideoFrames(frames);
     } catch (err) {
       setVideoError(c("videoReadError", lang));
@@ -198,21 +203,30 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
 
     const pickFrameIdx = framesPeople.findIndex((p) => p.length > 1);
     if (type === "Sparring" && pickFrameIdx !== -1) {
-      setPendingPick({ framesPeople, frameTimestamps, pickFrameIdx, frames, type });
+      setPendingPick({ framesPeople, frameTimestamps, pickFrameIdx, frames, width, height, type });
       return;
     }
 
     const landmarksSequence = resolveSinglePersonSequence(framesPeople);
-    const poseMetrics = computePoseMetrics(landmarksSequence, lang);
-    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, type, youPersonIndex: null });
+    // The dense, whole-clip table comes from the probe-pass samples (many
+    // more points across the full video than just the frames we send as
+    // images); the motion-trail image is built from the frames actually
+    // sent, since a trail with too many overlapping skeletons gets unreadable.
+    const poseMetrics = buildPoseTable(probeSamples, lang);
+    const motionTrailImage = drawMotionTrail(width, height, landmarksSequence.map((landmarks) => ({ landmarks })));
+    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, motionTrailImage, type, youPersonIndex: null });
   };
 
   const choosePerson = async (personIndex) => {
-    const { framesPeople, frameTimestamps, pickFrameIdx, frames, type } = pendingPick;
+    const { framesPeople, frameTimestamps, pickFrameIdx, frames, width, height, type } = pendingPick;
     setPendingPick(null);
     const landmarksSequence = linkPersonAcrossFrames(framesPeople, personIndex, pickFrameIdx);
-    const poseMetrics = computePoseMetrics(landmarksSequence, lang);
-    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, type, youPersonIndex: personIndex });
+    const poseMetrics = buildPoseTable(
+      landmarksSequence.map((landmarks, i) => ({ t: frameTimestamps[i], landmarks })),
+      lang
+    );
+    const motionTrailImage = drawMotionTrail(width, height, landmarksSequence.map((landmarks) => ({ landmarks })));
+    await runAiAnalysis({ frames, frameTimestamps, poseMetrics, motionTrailImage, type, youPersonIndex: personIndex });
   };
 
   const saveToJournal = async () => {

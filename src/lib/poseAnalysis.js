@@ -201,44 +201,70 @@ export function linkPersonAcrossFrames(framesPeople, startIndex, startFrameIdx) 
   return linked;
 }
 
-function avg(arr) {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
-function trendWord(arr, lang) {
-  const delta = arr[arr.length - 1] - arr[0];
-  const threshold = 0.02; // ignore noise smaller than this (normalized 0-1 scale)
-  if (Math.abs(delta) < threshold) return lang === "en" ? "stayed steady" : "sabit kaldı";
-  if (lang === "en") return delta > 0 ? "rose" : "dropped";
-  return delta > 0 ? "yükseldi" : "düştü";
-}
-
 const REQUIRED_METRIC_POINTS = [11, 12, 15, 16, 27, 28];
 
-// Builds a short, honest text summary from real tracked landmarks across the
-// selected frames — meant to give the AI coach measured numbers to reason
-// about instead of only guessing from still images. Returns "" if there
-// isn't enough reliable pose data to say anything meaningful.
-export function computePoseMetrics(landmarksSequence, lang) {
-  const frames = landmarksSequence.filter((f) => f && REQUIRED_METRIC_POINTS.every((i) => isVisible(f[i])));
-  if (frames.length < 2) return "";
+// Builds a real numeric time-series table from tracked landmarks across the
+// whole clip (not just the handful of frames sent as images) — meant to
+// give the AI coach measured data covering the entire video's movement,
+// not just a coarse one-line trend summary. Skips any sample where the
+// needed points weren't tracked with enough confidence. Returns "" if
+// there isn't enough reliable data to build a useful table.
+export function buildPoseTable(samples, lang) {
+  const rows = samples
+    .filter((s) => s.landmarks && REQUIRED_METRIC_POINTS.every((i) => isVisible(s.landmarks[i])))
+    .map((s) => ({
+      t: s.t.toFixed(1),
+      guardL: (s.landmarks[11].y - s.landmarks[15].y).toFixed(2),
+      guardR: (s.landmarks[12].y - s.landmarks[16].y).toFixed(2),
+      stance: Math.abs(s.landmarks[27].x - s.landmarks[28].x).toFixed(2),
+    }));
 
-  const guardLeft = frames.map((f) => f[11].y - f[15].y);
-  const guardRight = frames.map((f) => f[12].y - f[16].y);
-  const stanceWidth = frames.map((f) => Math.abs(f[27].x - f[28].x));
+  if (rows.length < 2) return "";
 
-  if (lang === "en") {
-    return `Real body-tracking data measured across ${frames.length} of the frames (pose detection, not a visual guess): left guard hand ${trendWord(
-      guardLeft,
-      lang
-    )} over the clip, right guard hand ${trendWord(guardRight, lang)}, average stance width ${avg(stanceWidth).toFixed(
-      2
-    )} (fraction of frame width — larger means wider stance).`;
-  }
-  return `${frames.length} karede gerçek vücut takip verisiyle ölçüldü (görsel tahmin değil, poz tespiti): sol guard eli klip boyunca ${trendWord(
-    guardLeft,
-    lang
-  )}, sağ guard eli ${trendWord(guardRight, lang)}, ortalama duruş genişliği ${avg(stanceWidth).toFixed(
-    2
-  )} (kare genişliğine oran — büyük değer daha geniş duruş demek).`;
+  const header =
+    lang === "en"
+      ? "Real body-tracking measurements sampled across the whole clip (pose detection, not a visual guess) — for each moment: time in seconds, left guard height, right guard height, stance width. All normalized 0-1; a larger guard value means the hand is held higher, a larger stance value means a wider stance:"
+      : "Klibin tamamından örneklenmiş gerçek vücut takip ölçümleri (görsel tahmin değil, poz tespiti) — her an için: saniye, sol guard yüksekliği, sağ guard yüksekliği, duruş genişliği. Hepsi 0-1 arası normalize; büyük guard değeri eli daha yukarıda tutmak, büyük duruş değeri daha geniş duruş demek:";
+
+  const lines = rows.map(
+    (r) => `${r.t}s: ${lang === "en" ? "L-guard" : "sol-guard"}=${r.guardL}, ${lang === "en" ? "R-guard" : "sağ-guard"}=${r.guardR}, ${lang === "en" ? "stance" : "duruş"}=${r.stance}`
+  );
+
+  return `${header}\n${lines.join("\n")}`;
+}
+
+// Renders one composite image showing the tracked skeleton at each sample
+// overlaid on the same frame, fading from faint (earliest) to solid
+// (latest) — a single glance at how the movement flowed across the clip,
+// instead of only separate stills. Returns null if there isn't enough
+// data to draw.
+export function drawMotionTrail(width, height, samples) {
+  const valid = samples.filter((s) => s.landmarks);
+  if (valid.length < 2) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#0a0a0a";
+  ctx.fillRect(0, 0, width, height);
+
+  valid.forEach((s, i) => {
+    ctx.globalAlpha = 0.22 + (0.78 * i) / (valid.length - 1);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#22d3ee";
+    ctx.fillStyle = "#22d3ee";
+    CONNECTIONS.forEach(([a, b]) => {
+      const pa = s.landmarks[a];
+      const pb = s.landmarks[b];
+      if (!isVisible(pa) || !isVisible(pb)) return;
+      ctx.beginPath();
+      ctx.moveTo(pa.x * width, pa.y * height);
+      ctx.lineTo(pb.x * width, pb.y * height);
+      ctx.stroke();
+    });
+  });
+  ctx.globalAlpha = 1;
+
+  return canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
 }
