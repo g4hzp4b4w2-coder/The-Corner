@@ -201,34 +201,42 @@ export function linkPersonAcrossFrames(framesPeople, startIndex, startFrameIdx) 
   return linked;
 }
 
-const REQUIRED_METRIC_POINTS = [11, 12, 15, 16, 27, 28];
-
 // Builds a real numeric time-series table from tracked landmarks across the
 // whole clip (not just the handful of frames sent as images) — meant to
 // give the AI coach measured data covering the entire video's movement,
-// not just a coarse one-line trend summary. Skips any sample where the
-// needed points weren't tracked with enough confidence. Returns "" if
-// there isn't enough reliable data to build a useful table.
+// not just a coarse one-line trend summary. Each metric (guard height per
+// side, stance width) is computed independently per sample and just
+// omitted where its specific points weren't tracked confidently — fast
+// punches routinely occlude a wrist for a frame or two, so requiring
+// every point at once would throw away most of a boxing clip's data.
+// Returns "" if there isn't enough reliable data to build a useful table.
 export function buildPoseTable(samples, lang) {
   const rows = samples
-    .filter((s) => s.landmarks && REQUIRED_METRIC_POINTS.every((i) => isVisible(s.landmarks[i])))
-    .map((s) => ({
-      t: s.t.toFixed(1),
-      guardL: (s.landmarks[11].y - s.landmarks[15].y).toFixed(2),
-      guardR: (s.landmarks[12].y - s.landmarks[16].y).toFixed(2),
-      stance: Math.abs(s.landmarks[27].x - s.landmarks[28].x).toFixed(2),
-    }));
+    .map((s) => {
+      const l = s.landmarks;
+      if (!l) return null;
+      const guardL = isVisible(l[11]) && isVisible(l[15]) ? (l[11].y - l[15].y).toFixed(2) : null;
+      const guardR = isVisible(l[12]) && isVisible(l[16]) ? (l[12].y - l[16].y).toFixed(2) : null;
+      const stance = isVisible(l[27]) && isVisible(l[28]) ? Math.abs(l[27].x - l[28].x).toFixed(2) : null;
+      if (guardL === null && guardR === null && stance === null) return null;
+      return { t: s.t.toFixed(1), guardL, guardR, stance };
+    })
+    .filter(Boolean);
 
   if (rows.length < 2) return "";
 
   const header =
     lang === "en"
-      ? "Real body-tracking measurements sampled across the whole clip (pose detection, not a visual guess) — for each moment: time in seconds, left guard height, right guard height, stance width. All normalized 0-1; a larger guard value means the hand is held higher, a larger stance value means a wider stance:"
-      : "Klibin tamamından örneklenmiş gerçek vücut takip ölçümleri (görsel tahmin değil, poz tespiti) — her an için: saniye, sol guard yüksekliği, sağ guard yüksekliği, duruş genişliği. Hepsi 0-1 arası normalize; büyük guard değeri eli daha yukarıda tutmak, büyük duruş değeri daha geniş duruş demek:";
+      ? "Real body-tracking measurements sampled across the whole clip (pose detection, not a visual guess) — for each moment: time in seconds, left guard height, right guard height, stance width (a metric is omitted for a moment if that specific point wasn't tracked confidently, e.g. a hand occluded mid-punch). All normalized 0-1; a larger guard value means the hand is held higher, a larger stance value means a wider stance:"
+      : "Klibin tamamından örneklenmiş gerçek vücut takip ölçümleri (görsel tahmin değil, poz tespiti) — her an için: saniye, sol guard yüksekliği, sağ guard yüksekliği, duruş genişliği (bir an için ilgili nokta güvenilir şekilde takip edilemediyse — örn. vuruş anında el kapandıysa — o ölçüm atlanır). Hepsi 0-1 arası normalize; büyük guard değeri eli daha yukarıda tutmak, büyük duruş değeri daha geniş duruş demek:";
 
-  const lines = rows.map(
-    (r) => `${r.t}s: ${lang === "en" ? "L-guard" : "sol-guard"}=${r.guardL}, ${lang === "en" ? "R-guard" : "sağ-guard"}=${r.guardR}, ${lang === "en" ? "stance" : "duruş"}=${r.stance}`
-  );
+  const lines = rows.map((r) => {
+    const parts = [];
+    if (r.guardL !== null) parts.push(`${lang === "en" ? "L-guard" : "sol-guard"}=${r.guardL}`);
+    if (r.guardR !== null) parts.push(`${lang === "en" ? "R-guard" : "sağ-guard"}=${r.guardR}`);
+    if (r.stance !== null) parts.push(`${lang === "en" ? "stance" : "duruş"}=${r.stance}`);
+    return `${r.t}s: ${parts.join(", ")}`;
+  });
 
   return `${header}\n${lines.join("\n")}`;
 }

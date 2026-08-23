@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Video, X, BookmarkPlus, MessageSquarePlus } from "lucide-react";
 import { addChatMessage } from "./lib/db";
 import { getChatReply } from "./lib/coach";
@@ -52,10 +52,10 @@ const COPY = {
   sentToChat: { tr: "Sohbete eklendi", en: "Added to chat" },
   sendError: { tr: "Gönderilemedi, tekrar dene.", en: "Couldn't send, try again." },
   emptyState: { tr: "Henüz analiz yok. Bir video yükleyerek başla.", en: "No analysis yet. Start by uploading a video." },
-  motionTrailTitle: { tr: "Hareket izi", en: "Motion trail" },
+  motionTrailTitle: { tr: "Hareket akışı", en: "Motion flow" },
   motionTrailCaption: {
-    tr: "Klip boyunca izlenen iskeletin üst üste bindirilmiş hali — soluk çizgi başlangıcı, koyu çizgi bitişi gösteriyor.",
-    en: "The tracked skeleton overlaid across the clip — the faintest line is the start, the boldest is the end.",
+    tr: "Analiz için seçilen kareler sırayla, ileri-geri oynatılıyor.",
+    en: "The frames picked for the analysis, playing back and forth in sequence.",
   },
   metricsTitle: { tr: "Takip verisi", en: "Tracking data" },
   showMetrics: { tr: "Ölçüm verisini göster", en: "Show tracking data" },
@@ -96,6 +96,32 @@ function ReportText({ text }) {
   );
 }
 
+// Plays the frames actually sent for analysis back-and-forth in a loop —
+// a rough stop-motion replay of the action, closer to what the user
+// pictured than a single flattened composite image.
+function FrameFlipbook({ frames }) {
+  const [index, setIndex] = useState(0);
+  const dirRef = useRef(1);
+
+  useEffect(() => {
+    if (!frames || frames.length < 2) return undefined;
+    const id = setInterval(() => {
+      setIndex((prev) => {
+        let next = prev + dirRef.current;
+        if (next >= frames.length - 1 || next <= 0) {
+          dirRef.current *= -1;
+          next = Math.max(0, Math.min(frames.length - 1, next));
+        }
+        return next;
+      });
+    }, 220);
+    return () => clearInterval(id);
+  }, [frames]);
+
+  if (!frames || frames.length === 0) return null;
+  return <img src={`data:image/jpeg;base64,${frames[index]}`} alt="" className="w-full rounded-lg border border-neutral-800" />;
+}
+
 export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis, onSentToChat }) {
   const [pendingVideoFile, setPendingVideoFile] = useState(null);
   const [videoType, setVideoType] = useState(VIDEO_TYPES[0]);
@@ -112,7 +138,6 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
   const [analysis, setAnalysis] = useState(null);
   const [analysisError, setAnalysisError] = useState("");
   const [analyzedVideoType, setAnalyzedVideoType] = useState("");
-  const [analysisTrailImage, setAnalysisTrailImage] = useState(null);
   const [analysisMetrics, setAnalysisMetrics] = useState("");
   const [showMetrics, setShowMetrics] = useState(false);
 
@@ -135,7 +160,6 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
     setAnalysis(null);
     setAnalysisError("");
     setAnalyzedVideoType("");
-    setAnalysisTrailImage(null);
     setAnalysisMetrics("");
     setShowMetrics(false);
     setSaved(false);
@@ -155,7 +179,6 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
 
   const runAiAnalysis = async ({ frames, frameTimestamps, poseMetrics, motionTrailImage, type, youPersonIndex }) => {
     setAnalyzedVideoType(type);
-    setAnalysisTrailImage(motionTrailImage || null);
     setAnalysisMetrics(poseMetrics || "");
     setAnalyzing(true);
     setAnalysisError("");
@@ -365,7 +388,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
         </div>
       )}
 
-      {!extracting && !pendingVideoFile && !pendingPick && videoFrames.length > 0 && (
+      {!extracting && !pendingVideoFile && !pendingPick && !analysis && videoFrames.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto mb-3">
           {videoFrames.map((f, i) => (
             <img key={i} src={`data:image/jpeg;base64,${f}`} alt="" className="w-20 h-20 object-cover rounded-lg shrink-0 border border-neutral-800" />
@@ -383,15 +406,11 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
           </div>
           <ReportText text={analysis} />
 
-          {analysisTrailImage && (
+          {videoFrames.length > 1 && (
             <div className="mt-3 pt-3 border-t border-neutral-800">
               <p className="text-neutral-400 text-[11px] font-medium mb-1.5">{c("motionTrailTitle", lang)}</p>
-              <img
-                src={`data:image/jpeg;base64,${analysisTrailImage}`}
-                alt={c("motionTrailTitle", lang)}
-                className="w-full rounded-lg border border-neutral-800 mb-1.5"
-              />
-              <p className="text-neutral-600 text-[10px] leading-relaxed">{c("motionTrailCaption", lang)}</p>
+              <FrameFlipbook frames={videoFrames} />
+              <p className="text-neutral-600 text-[10px] leading-relaxed mt-1.5">{c("motionTrailCaption", lang)}</p>
             </div>
           )}
 
