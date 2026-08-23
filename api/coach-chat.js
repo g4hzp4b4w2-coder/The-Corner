@@ -30,6 +30,11 @@ const VIDEO_TYPE_GUIDANCE = {
   },
 };
 
+const REPORT_MODE_INSTRUCTIONS = {
+  tr: "\n\nBu bir video analiz RAPORU isteği, sohbet değil — 'Merhaba', 'videona baktım', 'harika bir soru' gibi herhangi bir sohbet havası girişi/karşılaması KULLANMA, direkt yapılandırılmış analize başla. Cevabını şu üç başlıkla düzenle, her başlığı ayrı bir satırda düz metin olarak yaz (yıldız ya da # kullanma), altına ilgili paragrafı ekle: 'Duruş ve Guard', 'Denge ve Vücut Açısı', 'Öneriler ve Drilller'.",
+  en: "\n\nThis is a video analysis REPORT request, not a chat — do NOT use any conversational opener or greeting ('Hey', 'I looked at your video', 'great question'), go straight into the structured analysis. Organize your reply under these three headings, each on its own plain-text line (no asterisks or #), with the relevant paragraph beneath: 'Stance and Guard', 'Balance and Body Angle', 'Suggestions and Drills'.",
+};
+
 const VIDEO_INSTRUCTIONS = {
   tr: "\n\nBu mesajda kullanıcının videosundan alınmış birden fazla sıralı kare var. Kareler eşit aralıklarla değil, kare-kare hareket farkına bakılarak videodaki en hareketli anlara (muhtemelen vuruşlar, hızlı çıkışlar, ani yön değişimleri) öncelik verilerek seçildi — yani bu kareler aksiyonun yoğunlaştığı anları yakalamaya çalışıyor. Karelerin üzerinde, gerçek bir vücut takip modelinin bulduğu eklem noktalarını gösteren camgöbeği renginde çizgiler/noktalar olabilir (omuz, dirsek, bilek, kalça, diz, ayak bileği) — bunlar gerçek ölçüm, senin tahminin değil. Bu sefer kısa tutma — kareleri baştan sona gözden geçirip daha uzun, yapılandırılmış bir analiz yaz: (1) duruş ve guard'ın kareler boyunca, özellikle yoğun hareket anlarında nasıl değiştiğini, (2) denge ve vücut/omuz açısıyla ilgili fark ettiğin belirgin noktaları, (3) bunlara dayanarak somut, önceliklendirilmiş 2-3 iyileştirme önerisini ve her biri için kısa bir drill. Aşağıda gerçek takip verisinden çıkarılmış sayısal ölçümler varsa, bunları görsel tahminine göre önceliklendir ve doğrudan referans ver (örn. \"takip verisine göre...\"). Yine de sadece kanıtladığın şeyleri yaz, ölçülmeyen konularda (hız, güç gibi) tahmin yürütme.",
   en: "\n\nThis message includes multiple sequential frames from the user's video. Frames weren't sampled at even intervals — they were chosen by comparing motion between candidate frames and prioritizing the moments with the most movement in the clip (likely punches, quick bursts, sudden direction changes), so these frames are trying to capture the action-heavy moments. The frames may have cyan lines/dots drawn on them marking joints found by a real body-tracking model (shoulders, elbows, wrists, hips, knees, ankles) — that's measured data, not your guess. Don't keep it short this time — go through the frames and write a longer, structured analysis: (1) how stance and guard change across the frames, especially during the high-motion moments, (2) notable points about balance and body/shoulder angle, (3) 2-3 concrete, prioritized improvement suggestions based on that, each with a short drill. If numeric measurements from real tracking data are provided below, prioritize and directly reference them over your own visual guess (e.g. \"based on the tracking data...\"). Still only state what you can actually back up — don't guess at things that weren't measured, like speed or power.",
@@ -108,7 +113,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { messages, images, poseMetrics, videoType, caption, profile, entries, lang = "tr" } = req.body || {};
+  const { messages, images, poseMetrics, videoType, reportMode, caption, profile, entries, lang = "tr" } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages is required" });
     return;
@@ -141,11 +146,13 @@ export default async function handler(req, res) {
   const knowledgeLine = buildKnowledgeLine(knowledge, lang);
   const poseMetricsLine = hasImages && poseMetrics ? `\n\n${poseMetrics}` : "";
   const videoTypeLine = hasImages && videoType && VIDEO_TYPE_GUIDANCE[videoType] ? `\n\n${VIDEO_TYPE_GUIDANCE[videoType][lang] || VIDEO_TYPE_GUIDANCE[videoType].tr}` : "";
+  const reportModeLine = hasImages && reportMode ? REPORT_MODE_INSTRUCTIONS[lang] || REPORT_MODE_INSTRUCTIONS.tr : "";
   const system =
     buildSystemPrompt(profile, entries, lang, knowledgeLine) +
     (hasImages ? VIDEO_INSTRUCTIONS[lang] || VIDEO_INSTRUCTIONS.tr : "") +
     videoTypeLine +
     poseMetricsLine +
+    reportModeLine +
     (INSIGHT_INSTRUCTIONS[lang] || INSIGHT_INSTRUCTIONS.tr);
 
   try {

@@ -23,6 +23,7 @@ import { getWeeklyPlan } from "./lib/coach";
 import { getMatchNews } from "./lib/matchNews";
 import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
+import VideoAnalysisTab from "./VideoAnalysisTab";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
 const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
@@ -43,6 +44,8 @@ const translations = {
   communityTitle: { tr: "Topluluk", en: "Community" },
   feedLabel: { tr: "Akış", en: "Feed" },
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
+  chatSubTab: { tr: "Sohbet", en: "Chat" },
+  videoAnalysisSubTab: { tr: "Video Analiz", en: "Video Analysis" },
   profileTitle: { tr: "Profil", en: "Profile" },
   planGenerate: { tr: "Plan oluştur", en: "Generate plan" },
   editAnswersLabel: { tr: "Cevapları değiştir", en: "Edit answers" },
@@ -649,6 +652,48 @@ function StreakStrip({ entries, longestStreak, lang }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
+  const [subTab, setSubTab] = useState("chat");
+
+  return (
+    <div className="px-5 pb-5">
+      <p className="text-neutral-100 text-base font-medium mb-3">{t(lang, "navCoach")}</p>
+
+      <div className="flex bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 mb-3">
+        <button
+          onClick={() => setSubTab("chat")}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+            subTab === "chat" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+          }`}
+        >
+          {t(lang, "chatSubTab")}
+        </button>
+        <button
+          onClick={() => setSubTab("video")}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+            subTab === "video" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+          }`}
+        >
+          {t(lang, "videoAnalysisSubTab")}
+        </button>
+      </div>
+
+      {subTab === "chat" ? (
+        <CoachChat userId={userId} profileInfo={profileInfo} entries={entries} lang={lang} />
+      ) : (
+        <VideoAnalysisTab
+          userId={userId}
+          profileInfo={profileInfo}
+          entries={entries}
+          lang={lang}
+          onSaveVideoAnalysis={onSaveVideoAnalysis}
+          onSentToChat={() => setSubTab("chat")}
+        />
+      )}
     </div>
   );
 }
@@ -2521,7 +2566,7 @@ export default function TheCornerApp() {
           <JournalTab entries={entries} onAddClick={() => setShowForm(true)} onShareEntry={shareJournalEntry} lang={lang} />
         )
       ) : tab === "coach" ? (
-        <CoachChat userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
+        <CoachTab userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
       ) : tab === "calendar" ? (
         <CalendarTab
           onMarkDone={addPlanEntry}
