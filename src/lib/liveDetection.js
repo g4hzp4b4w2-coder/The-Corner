@@ -5,16 +5,24 @@
 // a boxing judge. The thresholds below are rough starting points meant to
 // be tuned against real test sessions, not tuned against real footage yet.
 //
-// v2: the first version triggered a punch off wrist-to-shoulder DISTANCE
-// (how far the hand got from the shoulder), which only really describes a
-// straight punch. A hook keeps the elbow bent and sweeps sideways, and an
-// uppercut stays fairly close to the body and travels mostly vertically —
-// neither necessarily pushes the wrist far from the shoulder, so real
-// testing (56 thrown, 18 counted) showed most hooks/uppercuts and even
-// some straights going undetected. This version triggers on wrist SPEED
-// instead — any fast burst of hand movement, in any direction — which
-// covers all punch types the same way, then classifies the shape
-// afterward from how the wrist moved during that burst.
+// v3: v1 triggered off wrist-to-shoulder distance (missed hooks/uppercuts,
+// which don't extend the arm far). v2 switched to wrist speed but decided
+// whether to count a punch by watching for the movement to "end" — first
+// by a speed threshold, then a debounce timer on top of that. Both kept
+// either double-counting one strike's extend-and-retract as two punches,
+// or throwing away real punches whose retraction was too noisy to close
+// out cleanly, no matter how the threshold/timer was tuned. The rule
+// itself was the problem: deciding when a continuous, physically noisy
+// motion has "ended" is a much harder and less reliable signal than
+// noticing that it clearly started.
+//
+// This version borrows the standard pattern rep counters and pedometers
+// use: count on the RISING edge of speed crossing a threshold, not the
+// falling edge. Once counted, an arm needs a short refractory period and
+// then has to genuinely slow back down before it's allowed to trigger
+// again — but nothing about counting depends on precisely detecting when
+// a motion stopped, so jitter in the retraction can't split or swallow
+// a punch the way it did before.
 
 const NOSE = 0;
 const SHOULDER = { left: 11, right: 12 };
@@ -31,28 +39,20 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-const PUNCH_COOLDOWN_MS = 300;
-const MAX_MOVE_MS = 700; // a "moving" burst longer than this without settling isn't a punch
-// Speed is in shoulder-widths per second, so it scales with distance from
-// the camera.
-const MOVE_SPEED_ON = 2.0;
-// A real punch's speed dips at full extension before reversing, but
-// rarely goes anywhere near zero — the hand is still moving, just
-// changing direction. Trying to catch that "movement is over" moment
-// with a mid-range OFF threshold (and later a debounce timer on top of
-// it) proved impossible to tune: too high and the reversal itself got
-// counted as a second punch, too aggressive a fix and noisy retractions
-// missed the debounce window and got dropped entirely (both happened in
-// testing). Setting OFF very low sidesteps the problem instead of trying
-// to time it: only genuine near-stillness (hand actually resting back at
-// guard) closes the movement, so one full extend-and-retract naturally
-// stays a single movement throughout, including its mid-punch slowdown.
-const MOVE_SPEED_OFF = 0.35;
-// Minimum net distance the wrist has to travel from where the burst
-// started, in shoulder-widths — filters out jitter/guard adjustments
-// without requiring the large, straight-line reach the old distance-based
-// trigger did (hooks and uppercuts travel less net distance than a jab).
-const MIN_PUNCH_DISPLACEMENT = 0.25;
+// Speed is in shoulder-widths per second (relative to this arm's own
+// shoulder — see below), smoothed slightly so single-frame landmark
+// jitter can't cross the threshold on its own.
+const SMOOTH_ALPHA = 0.5;
+const ON_THRESHOLD = 2.0;
+// Doesn't decide when a punch is "over" — only when the arm is allowed to
+// count a new one. Has to drop back down below this before re-arming.
+const REARM_SPEED = 0.6;
+// Minimum time between two counted punches on the same arm.
+const REFRACTORY_MS = 300;
+// After triggering, keep watching this long to see how far/which way the
+// wrist actually went, purely to guess straight/hook/uppercut — doesn't
+// affect whether the punch was counted, that already happened.
+const CLASSIFY_WINDOW_MS = 180;
 
 // A low or angled camera makes a normal guard look lower relative to the
 // nose than a straight-on shot would, so this needs real margin before
@@ -74,14 +74,12 @@ function classifyStyle(startRel, peakRel) {
 
 function initArmState() {
   return {
-    state: "idle", // idle | moving
     prevRel: null,
     prevT: null,
-    moveStartT: null,
-    moveStartRel: null,
-    peakDist: 0,
-    peakRel: null,
-    lastPunchT: -Infinity,
+    smoothedSpeed: 0,
+    rearmed: true,
+    lastCountT: -Infinity,
+    pending: null, // { startRel, peakRel, peakDist, deadlineT }
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
   };
@@ -118,39 +116,40 @@ export function createPunchDetector() {
       // position — footwork, bouncing, weaving, or just walking toward the
       // camera moves the whole body (wrist included) without the arm doing
       // anything, and that used to read as fast wrist "speed" on its own.
-      // Measuring the wrist against its own shoulder cancels out whole-body
-      // motion and leaves only what the arm actually did.
       if (!visible(wr) || !visible(sh)) continue;
       const rel = { x: (wr.x - sh.x) / shoulderWidth, y: (wr.y - sh.y) / shoulderWidth };
 
       if (arm.prevRel && arm.prevT != null) {
         const dt = (t - arm.prevT) / 1000;
         if (dt > 0) {
-          const speed = dist(rel, arm.prevRel) / dt;
+          const instSpeed = dist(rel, arm.prevRel) / dt;
+          arm.smoothedSpeed += SMOOTH_ALPHA * (instSpeed - arm.smoothedSpeed);
 
-          if (arm.state === "idle") {
-            if (speed > MOVE_SPEED_ON && t - arm.lastPunchT > PUNCH_COOLDOWN_MS) {
-              arm.state = "moving";
-              arm.moveStartT = t;
-              arm.moveStartRel = { ...arm.prevRel };
-              arm.peakDist = 0;
-              arm.peakRel = { ...rel };
+          if (arm.pending) {
+            const d = dist(rel, arm.pending.startRel);
+            if (d > arm.pending.peakDist) {
+              arm.pending.peakDist = d;
+              arm.pending.peakRel = { ...rel };
             }
-          } else {
-            const distFromStart = dist(rel, arm.moveStartRel);
-            if (distFromStart > arm.peakDist) {
-              arm.peakDist = distFromStart;
-              arm.peakRel = { ...rel };
+            if (t >= arm.pending.deadlineT) {
+              events.push({ type: "punch", side, style: classifyStyle(arm.pending.startRel, arm.pending.peakRel), t });
+              arm.pending = null;
             }
+          }
 
-            const tooLong = t - arm.moveStartT > MAX_MOVE_MS;
-            if (speed < MOVE_SPEED_OFF || tooLong) {
-              if (arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
-                events.push({ type: "punch", side, style: classifyStyle(arm.moveStartRel, arm.peakRel), t });
-                arm.lastPunchT = t;
-              }
-              arm.state = "idle";
-            }
+          if (!arm.rearmed && arm.smoothedSpeed < REARM_SPEED) {
+            arm.rearmed = true;
+          }
+
+          if (!arm.pending && arm.rearmed && arm.smoothedSpeed > ON_THRESHOLD && t - arm.lastCountT > REFRACTORY_MS) {
+            arm.pending = {
+              startRel: { ...arm.prevRel },
+              peakRel: { ...rel },
+              peakDist: dist(rel, arm.prevRel),
+              deadlineT: t + CLASSIFY_WINDOW_MS,
+            };
+            arm.lastCountT = t;
+            arm.rearmed = false;
           }
         }
       }
@@ -162,7 +161,7 @@ export function createPunchDetector() {
       // while that arm isn't mid-punch.
       if (visible(nose)) {
         const handDropped = wr.y > nose.y + shoulderWidth * GUARD_DROP_MARGIN;
-        if (arm.state === "idle" && handDropped) {
+        if (!arm.pending && handDropped) {
           if (arm.guardDropSinceT == null) arm.guardDropSinceT = t;
           else if (t - arm.guardDropSinceT > GUARD_DROP_MS && t - arm.lastGuardWarnT > GUARD_DROP_COOLDOWN_MS) {
             events.push({ type: "guardDrop", side, t });
