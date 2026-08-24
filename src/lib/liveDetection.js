@@ -38,6 +38,13 @@ const MAX_MOVE_MS = 700; // a "moving" burst longer than this without settling i
 // settle back down (not just dip) before it can count again.
 const MOVE_SPEED_ON = 2.0;
 const MOVE_SPEED_OFF = 0.8;
+// Speed dips briefly near zero right at full extension, before the arm
+// reverses to retract — without this, that natural inflection point got
+// misread as "movement over" and the retraction counted as a second
+// punch. Speed has to stay below MOVE_SPEED_OFF continuously for this
+// long before a movement is considered actually finished, which folds
+// the whole out-and-back of one strike into a single counted punch.
+const SETTLE_MS = 110;
 // Minimum net distance the wrist has to travel from where the burst
 // started, in shoulder-widths — filters out jitter/guard adjustments
 // without requiring the large, straight-line reach the old distance-based
@@ -69,6 +76,7 @@ function initArmState() {
     moveStartWrist: null,
     peakDist: 0,
     peakWrist: null,
+    belowOffSinceT: null,
     lastPunchT: -Infinity,
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
@@ -115,6 +123,7 @@ export function createPunchDetector() {
               arm.moveStartWrist = { x: arm.prevWrist.x, y: arm.prevWrist.y };
               arm.peakDist = 0;
               arm.peakWrist = { x: wr.x, y: wr.y };
+              arm.belowOffSinceT = null;
             }
           } else {
             const distFromStart = dist(wr, arm.moveStartWrist) / shoulderWidth;
@@ -122,13 +131,22 @@ export function createPunchDetector() {
               arm.peakDist = distFromStart;
               arm.peakWrist = { x: wr.x, y: wr.y };
             }
+
+            if (speed < MOVE_SPEED_OFF) {
+              if (arm.belowOffSinceT == null) arm.belowOffSinceT = t;
+            } else {
+              arm.belowOffSinceT = null;
+            }
+
             const tooLong = t - arm.moveStartT > MAX_MOVE_MS;
-            if (speed < MOVE_SPEED_OFF || tooLong) {
+            const settled = arm.belowOffSinceT != null && t - arm.belowOffSinceT > SETTLE_MS;
+            if (settled || tooLong) {
               if (!tooLong && arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
                 events.push({ type: "punch", side, style: classifyStyle(arm.moveStartWrist, arm.peakWrist, shoulderWidth), t });
                 arm.lastPunchT = t;
               }
               arm.state = "idle";
+              arm.belowOffSinceT = null;
             }
           }
         }
