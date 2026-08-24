@@ -62,9 +62,11 @@ const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
 const GUARD_DROP_COOLDOWN_MS = 3000;
 
-function classifyStyle(startWrist, peakWrist, shoulderWidth) {
-  const dx = (peakWrist.x - startWrist.x) / shoulderWidth;
-  const dy = (peakWrist.y - startWrist.y) / shoulderWidth; // normalized y grows downward
+// dx/dy here are already normalized (relative-to-shoulder coordinates
+// divided by shoulder width), no further scaling needed.
+function classifyStyle(startRel, peakRel) {
+  const dx = peakRel.x - startRel.x;
+  const dy = peakRel.y - startRel.y; // normalized y grows downward
   if (-dy > Math.abs(dx) * 1.1) return "uppercut";
   if (Math.abs(dx) > 0.7) return "hook";
   return "straight";
@@ -73,12 +75,12 @@ function classifyStyle(startWrist, peakWrist, shoulderWidth) {
 function initArmState() {
   return {
     state: "idle", // idle | moving
-    prevWrist: null,
+    prevRel: null,
     prevT: null,
     moveStartT: null,
-    moveStartWrist: null,
+    moveStartRel: null,
     peakDist: 0,
-    peakWrist: null,
+    peakRel: null,
     lastPunchT: -Infinity,
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
@@ -110,33 +112,41 @@ export function createPunchDetector() {
 
     for (const side of ["left", "right"]) {
       const wr = landmarks[WRIST[side]];
+      const sh = landmarks[SHOULDER[side]];
       const arm = arms[side];
-      if (!visible(wr)) continue;
+      // Tracked relative to this arm's own shoulder, not raw camera-frame
+      // position — footwork, bouncing, weaving, or just walking toward the
+      // camera moves the whole body (wrist included) without the arm doing
+      // anything, and that used to read as fast wrist "speed" on its own.
+      // Measuring the wrist against its own shoulder cancels out whole-body
+      // motion and leaves only what the arm actually did.
+      if (!visible(wr) || !visible(sh)) continue;
+      const rel = { x: (wr.x - sh.x) / shoulderWidth, y: (wr.y - sh.y) / shoulderWidth };
 
-      if (arm.prevWrist && arm.prevT != null) {
+      if (arm.prevRel && arm.prevT != null) {
         const dt = (t - arm.prevT) / 1000;
         if (dt > 0) {
-          const speed = dist(wr, arm.prevWrist) / dt / shoulderWidth;
+          const speed = dist(rel, arm.prevRel) / dt;
 
           if (arm.state === "idle") {
             if (speed > MOVE_SPEED_ON && t - arm.lastPunchT > PUNCH_COOLDOWN_MS) {
               arm.state = "moving";
               arm.moveStartT = t;
-              arm.moveStartWrist = { x: arm.prevWrist.x, y: arm.prevWrist.y };
+              arm.moveStartRel = { ...arm.prevRel };
               arm.peakDist = 0;
-              arm.peakWrist = { x: wr.x, y: wr.y };
+              arm.peakRel = { ...rel };
             }
           } else {
-            const distFromStart = dist(wr, arm.moveStartWrist) / shoulderWidth;
+            const distFromStart = dist(rel, arm.moveStartRel);
             if (distFromStart > arm.peakDist) {
               arm.peakDist = distFromStart;
-              arm.peakWrist = { x: wr.x, y: wr.y };
+              arm.peakRel = { ...rel };
             }
 
             const tooLong = t - arm.moveStartT > MAX_MOVE_MS;
             if (speed < MOVE_SPEED_OFF || tooLong) {
               if (arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
-                events.push({ type: "punch", side, style: classifyStyle(arm.moveStartWrist, arm.peakWrist, shoulderWidth), t });
+                events.push({ type: "punch", side, style: classifyStyle(arm.moveStartRel, arm.peakRel), t });
                 arm.lastPunchT = t;
               }
               arm.state = "idle";
@@ -145,7 +155,7 @@ export function createPunchDetector() {
         }
       }
 
-      arm.prevWrist = { x: wr.x, y: wr.y };
+      arm.prevRel = rel;
       arm.prevT = t;
 
       // Guard-drop: hand sitting below chin level for a sustained stretch
