@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, X, Minus, Plus } from "lucide-react";
 import { createPoseSession, drawSkeletons } from "./lib/poseAnalysis";
 import { createPunchDetector } from "./lib/liveDetection";
-import { playGong } from "./lib/gongSound";
+import { createCalibrationSession, CALIB_STEPS } from "./lib/punchCalibration";
+import { playGong, playTick } from "./lib/gongSound";
 
 const STYLE_LABEL = {
   straight: { tr: "Düz", en: "Straight" },
@@ -15,17 +16,20 @@ const SIDE_LABEL = {
 };
 
 const ROUND_DURATIONS = [60, 120, 180];
+const PREP_MS = 5000;
 
 const COPY = {
   subtitle: {
-    tr: "Kaç raund çalışacaksın ve raund süresi ne kadar olsun?",
-    en: "How many rounds, and how long should each one be?",
+    tr: "Kaç raund çalışacaksın ve raund süresi ne kadar olsun? Başlamadan önce sayımı sana göre ayarlamak için birkaç örnek vuruş isteyeceğiz.",
+    en: "How many rounds, and how long should each one be? Before starting, we'll ask for a few sample punches to calibrate counting to you.",
   },
   roundsLabel: { tr: "Raund sayısı", en: "Number of rounds" },
   roundDurationLabel: { tr: "Raund süresi", en: "Round duration" },
   minuteShort: { tr: "dk", en: "min" },
   startLabel: { tr: "Başla", en: "Start" },
-  warmupLabel: { tr: "Hazırlan", en: "Get ready" },
+  prepLabel: { tr: "Hazırlan, kamerayı yerleştir", en: "Get ready, set up the camera" },
+  calibReadyLabel: { tr: "Hazır ol", en: "Get ready" },
+  calibGoLabel: { tr: "ŞİMDİ AT!", en: "THROW NOW!" },
   roundLabel: { tr: "Raund", en: "Round" },
   permissionDenied: {
     tr: "Kamera izni verilmedi. Tarayıcı ayarlarından bu site için kameraya izin ver.",
@@ -110,8 +114,12 @@ export default function ShadowBoxingMode({ lang, onBack }) {
   const phaseEndRef = useRef(0);
   const lastCountdownRef = useRef(-1);
   const roundStatsRef = useRef({ ...emptyRoundStats });
+  const calibSessionRef = useRef(null);
+  const calibrationRef = useRef(null);
+  const calibIndexRef = useRef(0);
 
-  const [phase, setPhase] = useState("setup"); // setup | warmup | round | roundEnd | sessionEnd
+  // setup | prep | calib-leadin | calib-capture | round | roundEnd | sessionEnd
+  const [phase, setPhase] = useState("setup");
   const [roundCount, setRoundCount] = useState(3);
   const [roundDuration, setRoundDuration] = useState(180);
   const [currentRound, setCurrentRound] = useState(1);
@@ -120,6 +128,7 @@ export default function ShadowBoxingMode({ lang, onBack }) {
   const [events, setEvents] = useState([]);
   const [guardWarning, setGuardWarning] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [calibStepIndex, setCalibStepIndex] = useState(0);
   const [error, setError] = useState("");
 
   const teardownCamera = () => {
@@ -155,16 +164,39 @@ export default function ShadowBoxingMode({ lang, onBack }) {
     }
   };
 
-  const beginWarmup = () => {
-    phaseEndRef.current = performance.now() + 30000;
+  const beginPrep = () => {
+    phaseEndRef.current = performance.now() + PREP_MS;
     lastCountdownRef.current = -1;
-    setCountdown(30);
-    phaseRef.current = "warmup";
-    setPhase("warmup");
+    setCountdown(Math.ceil(PREP_MS / 1000));
+    phaseRef.current = "prep";
+    setPhase("prep");
+  };
+
+  // Steps through CALIB_STEPS one at a time (lead-in, then a capture
+  // window per step); once every step is done, turns the recording into
+  // a calibration profile and moves straight into round 1.
+  const beginCalibLeadIn = (index) => {
+    if (index >= CALIB_STEPS.length) {
+      calibrationRef.current = calibSessionRef.current?.finish() || null;
+      beginRound(1);
+      return;
+    }
+    calibIndexRef.current = index;
+    setCalibStepIndex(index);
+    phaseEndRef.current = performance.now() + CALIB_STEPS[index].leadInMs;
+    phaseRef.current = "calib-leadin";
+    setPhase("calib-leadin");
+  };
+
+  const beginCalibCapture = (index) => {
+    playTick();
+    phaseEndRef.current = performance.now() + CALIB_STEPS[index].captureMs;
+    phaseRef.current = "calib-capture";
+    setPhase("calib-capture");
   };
 
   const beginRound = (roundNumber) => {
-    detectorRef.current = createPunchDetector();
+    detectorRef.current = createPunchDetector(calibrationRef.current);
     roundStatsRef.current = { ...emptyRoundStats };
     setRoundStats({ ...emptyRoundStats });
     setEvents([]);
@@ -200,6 +232,8 @@ export default function ShadowBoxingMode({ lang, onBack }) {
   const startTraining = async () => {
     setError("");
     setRoundsHistory([]);
+    calibSessionRef.current = createCalibrationSession();
+    calibrationRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       streamRef.current = stream;
@@ -217,7 +251,7 @@ export default function ShadowBoxingMode({ lang, onBack }) {
       canvas.height = height;
 
       poseSessionRef.current = await createPoseSession();
-      beginWarmup();
+      beginPrep();
 
       const ctx = canvas.getContext("2d");
       const loop = () => {
@@ -228,8 +262,10 @@ export default function ShadowBoxingMode({ lang, onBack }) {
 
         const now = performance.now();
         const currentPhase = phaseRef.current;
+        const timedPhase =
+          currentPhase === "prep" || currentPhase === "calib-leadin" || currentPhase === "calib-capture" || currentPhase === "round";
 
-        if (currentPhase === "warmup" || currentPhase === "round") {
+        if (timedPhase) {
           const remainingMs = phaseEndRef.current - now;
           if (remainingMs > 0) {
             const remainingSec = Math.ceil(remainingMs / 1000);
@@ -240,9 +276,16 @@ export default function ShadowBoxingMode({ lang, onBack }) {
             if (currentPhase === "round") {
               const newEvents = detectorRef.current.update(people[0] || null, now);
               handleEvents(newEvents);
+            } else if (currentPhase === "calib-capture") {
+              const step = CALIB_STEPS[calibIndexRef.current];
+              calibSessionRef.current?.recordFrame(step.key, step.side, people[0] || null, now);
             }
-          } else if (currentPhase === "warmup") {
-            beginRound(1);
+          } else if (currentPhase === "prep") {
+            beginCalibLeadIn(0);
+          } else if (currentPhase === "calib-leadin") {
+            beginCalibCapture(calibIndexRef.current);
+          } else if (currentPhase === "calib-capture") {
+            beginCalibLeadIn(calibIndexRef.current + 1);
           } else {
             endRound();
           }
@@ -259,9 +302,11 @@ export default function ShadowBoxingMode({ lang, onBack }) {
     }
   };
 
-  const cameraPhases = phase === "warmup" || phase === "round" || phase === "roundEnd";
+  const cameraPhases =
+    phase === "prep" || phase === "calib-leadin" || phase === "calib-capture" || phase === "round" || phase === "roundEnd";
   const lastRound = roundsHistory[roundsHistory.length - 1];
   const totals = sumStats(roundsHistory);
+  const calibStep = CALIB_STEPS[calibStepIndex];
 
   return (
     <div className="flex flex-col" style={{ minHeight: 420 }}>
@@ -339,78 +384,98 @@ export default function ShadowBoxingMode({ lang, onBack }) {
       >
         <canvas ref={canvasRef} className="w-full block" />
 
-            <button
-              onClick={abortSession}
-              aria-label="Close"
-              className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-neutral-950/70 rounded-full text-neutral-400"
-            >
-              <X size={14} />
-            </button>
+        <button
+          onClick={abortSession}
+          aria-label="Close"
+          className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-neutral-950/70 rounded-full text-neutral-400"
+        >
+          <X size={14} />
+        </button>
 
-            {phase === "round" && (
-              <div className="absolute top-2 left-2 bg-neutral-950/70 rounded-lg px-2.5 py-1">
-                <span className="text-neutral-100 text-xs font-medium tabular-nums">
-                  {c("roundLabel", lang)} {currentRound}/{roundCount} · {formatClock(countdown)}
-                </span>
-              </div>
-            )}
-
-            {phase === "warmup" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
-                <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
-                <span className="text-neutral-400 text-xs">{c("warmupLabel", lang)}</span>
-              </div>
-            )}
-
-            {guardWarning && phase === "round" && (
-              <div className="absolute inset-x-0 bottom-0 bg-red-600 text-neutral-950 text-xs font-medium text-center py-1.5">
-                {c("guardWarning", lang)}
-              </div>
-            )}
+        {phase === "round" && (
+          <div className="absolute top-2 left-2 bg-neutral-950/70 rounded-lg px-2.5 py-1">
+            <span className="text-neutral-100 text-xs font-medium tabular-nums">
+              {c("roundLabel", lang)} {currentRound}/{roundCount} · {formatClock(countdown)}
+            </span>
           </div>
+        )}
 
-          {phase === "round" && (
-            <div className="flex flex-col gap-2.5 mb-3">
-              <StatsGrid stats={roundStats} lang={lang} />
-              {events.length > 0 && (
-                <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-                  <p className="text-neutral-500 text-[10px] mb-1.5">{c("recentLabel", lang)}</p>
-                  <div className="flex flex-col gap-1">
-                    {events.map((ev, i) => (
-                      <p key={i} className="text-neutral-300 text-xs">
-                        {SIDE_LABEL[ev.side][lang] || SIDE_LABEL[ev.side].tr}
-                        {ev.type === "punch" ? ` · ${STYLE_LABEL[ev.style][lang] || STYLE_LABEL[ev.style].tr}` : ` · ${c("guardDropEvent", lang)}`}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {phase === "prep" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
+            <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
+            <span className="text-neutral-400 text-xs">{c("prepLabel", lang)}</span>
+          </div>
+        )}
+
+        {phase === "calib-leadin" && calibStep && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-neutral-950/60">
+            <span className="text-neutral-500 text-[11px]">
+              {calibStepIndex + 1}/{CALIB_STEPS.length}
+            </span>
+            <span className="text-neutral-300 text-2xl font-medium">{calibStep.label[lang] || calibStep.label.tr}</span>
+            <span className="text-neutral-500 text-xs">{c("calibReadyLabel", lang)}</span>
+          </div>
+        )}
+
+        {phase === "calib-capture" && calibStep && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-red-950/50">
+            <span className="text-neutral-500 text-[11px]">
+              {calibStepIndex + 1}/{CALIB_STEPS.length}
+            </span>
+            <span className="text-neutral-100 text-2xl font-medium">{calibStep.label[lang] || calibStep.label.tr}</span>
+            <span className="text-red-400 text-sm font-medium">{c("calibGoLabel", lang)}</span>
+          </div>
+        )}
+
+        {guardWarning && phase === "round" && (
+          <div className="absolute inset-x-0 bottom-0 bg-red-600 text-neutral-950 text-xs font-medium text-center py-1.5">
+            {c("guardWarning", lang)}
+          </div>
+        )}
+      </div>
+
+      {phase === "round" && (
+        <div className="flex flex-col gap-2.5 mb-3">
+          <StatsGrid stats={roundStats} lang={lang} />
+          {events.length > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
+              <p className="text-neutral-500 text-[10px] mb-1.5">{c("recentLabel", lang)}</p>
+              <div className="flex flex-col gap-1">
+                {events.map((ev, i) => (
+                  <p key={i} className="text-neutral-300 text-xs">
+                    {SIDE_LABEL[ev.side][lang] || SIDE_LABEL[ev.side].tr}
+                    {ev.type === "punch" ? ` · ${STYLE_LABEL[ev.style][lang] || STYLE_LABEL[ev.style].tr}` : ` · ${c("guardDropEvent", lang)}`}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
+        </div>
+      )}
 
-          {phase === "roundEnd" && lastRound && (
-            <div className="flex flex-col gap-3 mb-3">
-              <p className="text-neutral-300 text-sm font-medium">
-                {c("roundSummaryTitle", lang)} · {c("perRoundLabel", lang)} {currentRound}
-              </p>
-              <StatsGrid stats={lastRound} lang={lang} />
-              {currentRound < roundCount ? (
-                <button
-                  onClick={() => beginRound(currentRound + 1)}
-                  className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
-                >
-                  {c("nextRoundLabel", lang)}
-                </button>
-              ) : (
-                <button
-                  onClick={finishTraining}
-                  className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
-                >
-                  {c("finishTrainingLabel", lang)}
-                </button>
-              )}
-            </div>
+      {phase === "roundEnd" && lastRound && (
+        <div className="flex flex-col gap-3 mb-3">
+          <p className="text-neutral-300 text-sm font-medium">
+            {c("roundSummaryTitle", lang)} · {c("perRoundLabel", lang)} {currentRound}
+          </p>
+          <StatsGrid stats={lastRound} lang={lang} />
+          {currentRound < roundCount ? (
+            <button
+              onClick={() => beginRound(currentRound + 1)}
+              className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
+            >
+              {c("nextRoundLabel", lang)}
+            </button>
+          ) : (
+            <button
+              onClick={finishTraining}
+              className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
+            >
+              {c("finishTrainingLabel", lang)}
+            </button>
           )}
+        </div>
+      )}
 
       {phase === "sessionEnd" && (
         <div className="flex flex-col gap-3">
