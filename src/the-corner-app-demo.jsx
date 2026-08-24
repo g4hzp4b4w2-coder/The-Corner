@@ -25,6 +25,7 @@ import { getMatchNews } from "./lib/matchNews";
 import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
 import CoachChat from "./CoachChat";
 import VideoAnalysisTab from "./VideoAnalysisTab";
+import LiveTrainingTab from "./LiveTrainingTab";
 import FrameFlipbook from "./FrameFlipbook";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
@@ -48,6 +49,7 @@ const translations = {
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
   chatSubTab: { tr: "Sohbet", en: "Chat" },
   videoAnalysisSubTab: { tr: "Video Analiz", en: "Video Analysis" },
+  liveTrainingSubTab: { tr: "Canlı Antrenman", en: "Live Training" },
   profileTitle: { tr: "Profil", en: "Profile" },
   planGenerate: { tr: "Plan oluştur", en: "Generate plan" },
   editAnswersLabel: { tr: "Cevapları değiştir", en: "Edit answers" },
@@ -682,11 +684,19 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
         >
           {t(lang, "videoAnalysisSubTab")}
         </button>
+        <button
+          onClick={() => setSubTab("live")}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+            subTab === "live" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+          }`}
+        >
+          {t(lang, "liveTrainingSubTab")}
+        </button>
       </div>
 
       {subTab === "chat" ? (
         <CoachChat userId={userId} profileInfo={profileInfo} entries={entries} lang={lang} />
-      ) : (
+      ) : subTab === "video" ? (
         <VideoAnalysisTab
           userId={userId}
           profileInfo={profileInfo}
@@ -695,6 +705,8 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
           onSaveVideoAnalysis={onSaveVideoAnalysis}
           onSentToChat={() => setSubTab("chat")}
         />
+      ) : (
+        <LiveTrainingTab lang={lang} />
       )}
     </div>
   );
