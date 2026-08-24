@@ -341,7 +341,7 @@ function CornerMark({ width = 30 }) {
 function BoxingGloveLoader({ size = 40, label, compact = false }) {
   return (
     <div className={`flex flex-col items-center justify-center gap-2 ${compact ? "py-1" : "py-6"}`}>
-      <img src="/logo-mark.png" width={size} className="glove-punch" style={{ height: "auto", display: "block" }} alt="Yükleniyor" />
+      <img src="/logo-mark.png" width={size} className="logo-fade" style={{ height: "auto", display: "block" }} alt="Yükleniyor" />
       {label && <p className="text-neutral-600 text-xs">{label}</p>}
     </div>
   );
