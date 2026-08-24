@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -461,6 +461,7 @@ function computeWeeklyArchive(entries) {
 }
 
 function WeeklyArchive({ entries, lang }) {
+  const [openWeek, setOpenWeek] = useState(null);
   const currentWeekStart = startOfWeek(Date.now());
   const pastWeeks = computeWeeklyArchive(entries).filter((w) => w.weekStart < currentWeekStart);
 
@@ -481,20 +482,50 @@ function WeeklyArchive({ entries, lang }) {
           const improved = mostImprovedTag(w.entries);
           const improvedLabel = improved ? tt(improved.replace(" ↑", ""), lang) : null;
           const weekEnd = w.weekStart + 6 * DAY_MS;
+          const isOpen = openWeek === w.weekStart;
+          const weekEntriesSorted = [...w.entries].sort((a, b) => b.createdAt - a.createdAt);
           return (
-            <div key={w.weekStart} className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-300 text-xs font-medium">
-                  {formatShortDate(w.weekStart, lang)} – {formatShortDate(weekEnd, lang)}
-                </span>
-                <span className="text-neutral-500 text-[11px]">
-                  {w.entries.length} {t(lang, "sessionsUnitLabel")}
-                </span>
-              </div>
-              {improvedLabel && (
-                <p className="text-neutral-500 text-[11px] mt-1">
-                  {t(lang, "mostImprovedShortLabel")}: {improvedLabel}
-                </p>
+            <div key={w.weekStart} className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setOpenWeek(isOpen ? null : w.weekStart)}
+                className="w-full text-left p-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-300 text-xs font-medium">
+                    {formatShortDate(w.weekStart, lang)} – {formatShortDate(weekEnd, lang)}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-neutral-500 text-[11px]">
+                      {w.entries.length} {t(lang, "sessionsUnitLabel")}
+                    </span>
+                    <ChevronDown
+                      size={13}
+                      className="text-neutral-600 transition-transform"
+                      style={{ transform: isOpen ? "rotate(180deg)" : "none" }}
+                    />
+                  </div>
+                </div>
+                {improvedLabel && (
+                  <p className="text-neutral-500 text-[11px] mt-1">
+                    {t(lang, "mostImprovedShortLabel")}: {improvedLabel}
+                  </p>
+                )}
+              </button>
+
+              {isOpen && (
+                <div className="border-t border-neutral-800 flex flex-col gap-2 p-2.5">
+                  {weekEntriesSorted.map((e) => (
+                    <div key={e.id}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-300 text-xs">
+                          {e.label} · {entryCategoryLabel(e, lang)}
+                        </span>
+                        <span className="text-neutral-600 text-[11px]">{e.duration}</span>
+                      </div>
+                      {e.note && <p className="text-neutral-600 text-[11px] mt-0.5">{e.note}</p>}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           );
