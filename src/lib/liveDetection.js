@@ -40,9 +40,14 @@ function dist(a, b) {
 }
 
 // Speed is in shoulder-widths per second (relative to this arm's own
-// shoulder — see below), smoothed slightly so single-frame landmark
-// jitter can't cross the threshold on its own.
-const SMOOTH_ALPHA = 0.5;
+// shoulder — see below), lightly smoothed so a single wildly-off landmark
+// jump can't cross the threshold alone. Real test feedback (62 thrown, 38
+// counted) showed 0.5 smoothed too aggressively — a fast punch's raw
+// speed can peak for only a single frame, and heavy smoothing pulls that
+// peak down well below the threshold before it's ever seen. Weighting
+// the new sample much more heavily keeps most of the single-frame-noise
+// protection while barely blunting a real spike.
+const SMOOTH_ALPHA = 0.85;
 const ON_THRESHOLD = 2.0;
 // Doesn't decide when a punch is "over" — only when the arm is allowed to
 // count a new one. Has to drop back down below this before re-arming.
