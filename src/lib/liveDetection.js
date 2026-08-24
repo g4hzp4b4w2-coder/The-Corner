@@ -60,7 +60,12 @@ const CLASSIFY_WINDOW_MS = 180;
 // dip mid-combo) — first test feedback was that this was firing too easily.
 const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
-const GUARD_DROP_COOLDOWN_MS = 3000;
+// How often a single, continuously-held drop re-warns — 3s made a
+// deliberate multi-second hold in testing look like it barely registered
+// ("2 kez düştü" for a good few seconds down), even though it was
+// working as designed (throttled on purpose so one lapse doesn't spam).
+// Shortened so a sustained drop reads as clearly ongoing.
+const GUARD_DROP_COOLDOWN_MS = 1500;
 
 // dx/dy here are already normalized (relative-to-shoulder coordinates
 // divided by shoulder width), no further scaling needed.
