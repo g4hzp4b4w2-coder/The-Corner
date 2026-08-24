@@ -141,7 +141,13 @@ export function createPunchDetector() {
             const tooLong = t - arm.moveStartT > MAX_MOVE_MS;
             const settled = arm.belowOffSinceT != null && t - arm.belowOffSinceT > SETTLE_MS;
             if (settled || tooLong) {
-              if (!tooLong && arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
+              // A noisy retraction can miss a clean SETTLE_MS window and
+              // only close out via the tooLong fallback — that must not
+              // disqualify an otherwise real punch (this exact bug dropped
+              // detection to near zero in testing: almost every punch hit
+              // tooLong instead of settled, and used to get thrown away
+              // here regardless of how far the wrist had actually moved).
+              if (arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
                 events.push({ type: "punch", side, style: classifyStyle(arm.moveStartWrist, arm.peakWrist, shoulderWidth), t });
                 arm.lastPunchT = t;
               }
