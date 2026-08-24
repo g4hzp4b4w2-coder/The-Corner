@@ -19,8 +19,13 @@ function dist(a, b) {
 
 const PUNCH_COOLDOWN_MS = 300;
 const MAX_EXTENSION_MS = 800; // arm held out this long without retracting isn't treated as a punch
-const GUARD_DROP_MS = 600;
-const GUARD_DROP_COOLDOWN_MS = 2000;
+// A low or angled camera makes a normal guard look lower relative to the
+// nose than a straight-on shot would, so this needs real margin before
+// calling it a drop, and has to hold for a while first (not just a brief
+// dip mid-combo) — first test feedback was that this was firing too easily.
+const GUARD_DROP_MARGIN = 0.55;
+const GUARD_DROP_MS = 900;
+const GUARD_DROP_COOLDOWN_MS = 3000;
 // Both ratios are wrist-to-shoulder distance divided by shoulder width, so
 // they scale with how close the user stands to the camera.
 const EXTEND_RATIO_THRESHOLD = 1.55;
@@ -84,7 +89,7 @@ export function createPunchDetector() {
 
       // Guard-drop: hand sitting below chin level for a sustained stretch
       // while that arm isn't mid-punch.
-      const handDropped = wr.y > nose.y + shoulderWidth * 0.35;
+      const handDropped = wr.y > nose.y + shoulderWidth * GUARD_DROP_MARGIN;
       if (arm.state === "guard" && handDropped) {
         if (arm.guardDropSinceT == null) arm.guardDropSinceT = t;
         else if (t - arm.guardDropSinceT > GUARD_DROP_MS && t - arm.lastGuardWarnT > GUARD_DROP_COOLDOWN_MS) {
