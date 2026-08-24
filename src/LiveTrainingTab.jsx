@@ -15,8 +15,8 @@ const SIDE_LABEL = {
 
 const COPY = {
   subtitle: {
-    tr: "Kamerayı aç, yumruklarını at — sayım ve tip tahmini basit hareket kurallarına dayanıyor, mükemmel olmayabilir.",
-    en: "Turn on the camera and throw punches — counting and style guesses are based on simple motion rules, so they won't be perfect.",
+    tr: "Kamerayı aç, kendini yerleştir — 30 saniyelik hazırlık süresinden sonra sayım başlar. Sayım ve tip tahmini basit hareket kurallarına dayanıyor, mükemmel olmayabilir.",
+    en: "Turn on the camera and get into position — counting starts after a 30-second warmup. Counting and style guesses are based on simple motion rules, so they won't be perfect.",
   },
   start: { tr: "Kamerayı başlat", en: "Start camera" },
   stop: { tr: "Durdur", en: "Stop" },
@@ -30,7 +30,10 @@ const COPY = {
   guardWarning: { tr: "Guard açık!", en: "Guard's down!" },
   recentLabel: { tr: "Son hareketler", en: "Recent moves" },
   guardDropEvent: { tr: "guard düştü", en: "guard dropped" },
+  warmupLabel: { tr: "Hazırlan", en: "Get ready" },
 };
+
+const WARMUP_MS = 30000;
 
 function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
@@ -46,12 +49,15 @@ export default function LiveTrainingTab({ lang }) {
   const detectorRef = useRef(null);
   const rafRef = useRef(null);
   const guardWarnTimeoutRef = useRef(null);
+  const countdownEndRef = useRef(0);
+  const lastCountdownRef = useRef(-1);
 
   const [active, setActive] = useState(false);
   const [error, setError] = useState("");
   const [stats, setStats] = useState(emptyStats);
   const [events, setEvents] = useState([]);
   const [guardWarning, setGuardWarning] = useState(false);
+  const [countdown, setCountdown] = useState(0);
 
   const stop = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -63,6 +69,7 @@ export default function LiveTrainingTab({ lang }) {
     poseSessionRef.current = null;
     setActive(false);
     setGuardWarning(false);
+    setCountdown(0);
   };
 
   useEffect(() => stop, []);
@@ -109,6 +116,12 @@ export default function LiveTrainingTab({ lang }) {
 
       poseSessionRef.current = await createPoseSession();
       detectorRef.current = createPunchDetector();
+      // Give the user time to set the phone down and get into position
+      // before anything counts — otherwise placing the camera itself gets
+      // picked up as punches/guard drops and pollutes the session.
+      countdownEndRef.current = performance.now() + WARMUP_MS;
+      lastCountdownRef.current = -1;
+      setCountdown(Math.ceil(WARMUP_MS / 1000));
       setActive(true);
 
       const ctx = canvas.getContext("2d");
@@ -117,8 +130,23 @@ export default function LiveTrainingTab({ lang }) {
         ctx.drawImage(video, 0, 0, width, height);
         const people = poseSessionRef.current ? poseSessionRef.current.detectAll(canvas) : [];
         drawSkeletons(canvas, people);
-        const newEvents = detectorRef.current.update(people[0] || null, performance.now());
-        handleEvents(newEvents);
+
+        const now = performance.now();
+        const remainingMs = countdownEndRef.current - now;
+        if (remainingMs > 0) {
+          const remainingSec = Math.ceil(remainingMs / 1000);
+          if (remainingSec !== lastCountdownRef.current) {
+            lastCountdownRef.current = remainingSec;
+            setCountdown(remainingSec);
+          }
+        } else {
+          if (lastCountdownRef.current !== 0) {
+            lastCountdownRef.current = 0;
+            setCountdown(0);
+          }
+          const newEvents = detectorRef.current.update(people[0] || null, now);
+          handleEvents(newEvents);
+        }
         rafRef.current = requestAnimationFrame(loop);
       };
       loop();
@@ -146,7 +174,13 @@ export default function LiveTrainingTab({ lang }) {
             <VideoIcon size={24} className="text-neutral-700" />
           </div>
         )}
-        {guardWarning && (
+        {countdown > 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
+            <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
+            <span className="text-neutral-400 text-xs">{c("warmupLabel", lang)}</span>
+          </div>
+        )}
+        {guardWarning && countdown === 0 && (
           <div className="absolute inset-x-0 top-0 bg-red-600 text-neutral-950 text-xs font-medium text-center py-1.5">
             {c("guardWarning", lang)}
           </div>
