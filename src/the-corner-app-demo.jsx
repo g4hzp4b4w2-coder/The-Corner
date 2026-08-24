@@ -67,6 +67,7 @@ const translations = {
   weeklySummaryLabel: { tr: "Haftalık özet", en: "Weekly summary" },
   weeklyArchiveLabel: { tr: "Haftalık arşiv", en: "Weekly archive" },
   weeklyArchiveEmpty: { tr: "Henüz geçmiş bir hafta yok.", en: "No past weeks yet." },
+  weeklyArchiveHint: { tr: "Geçmiş haftaları Profil > Haftalık arşiv'de görebilirsin.", en: "You can see past weeks under Profile > Weekly archive." },
   sessionsUnitLabel: { tr: "seans", en: "sessions" },
   mostTrainedShortLabel: { tr: "En çok çalıştığın alan", en: "Most trained area" },
   trendChartTitle: { tr: "Son 8 hafta", en: "Last 8 weeks" },
@@ -442,6 +443,7 @@ function WeeklySummary({ entries, lang }) {
           ? `You completed ${entries.length} sessions this week.${topCategoryLabel ? ` Most trained area: ${topCategoryLabel}.` : ""}`
           : `Bu hafta ${entries.length} seans tamamladın.${topCategoryLabel ? ` En çok çalıştığın alan: ${topCategoryLabel}.` : ""}`}
       </p>
+      <p className="text-neutral-600 text-[11px] mt-1.5">{t(lang, "weeklyArchiveHint")}</p>
     </div>
   );
 }
