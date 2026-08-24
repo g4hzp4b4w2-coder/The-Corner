@@ -68,7 +68,7 @@ const translations = {
   weeklyArchiveLabel: { tr: "Haftalık arşiv", en: "Weekly archive" },
   weeklyArchiveEmpty: { tr: "Henüz geçmiş bir hafta yok.", en: "No past weeks yet." },
   sessionsUnitLabel: { tr: "seans", en: "sessions" },
-  mostImprovedShortLabel: { tr: "En çok gelişen", en: "Most improved" },
+  mostTrainedShortLabel: { tr: "En çok çalıştığın alan", en: "Most trained area" },
   trendChartTitle: { tr: "Son 8 hafta", en: "Last 8 weeks" },
   categoryChartTitle: { tr: "Son 4 hafta · kategori dağılımı", en: "Last 4 weeks · category breakdown" },
   chartEmptyState: { tr: "Henüz gösterecek veri yok, birkaç seans kaydet.", en: "Not enough data yet — log a few sessions." },
@@ -415,11 +415,13 @@ function StatCard({ label, value }) {
   );
 }
 
-function mostImprovedTag(entries) {
+// Which category got trained the most, counted straight off the entries'
+// own "categories" field — a plain tally, not an AI-generated insight.
+function mostTrainedCategory(entries) {
   const counts = {};
   entries.forEach((e) =>
-    e.tags.forEach((tag) => {
-      if (tag.tone === "good") counts[tag.text] = (counts[tag.text] || 0) + 1;
+    (e.categories || []).forEach((cat) => {
+      counts[cat] = (counts[cat] || 0) + 1;
     })
   );
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -427,8 +429,8 @@ function mostImprovedTag(entries) {
 }
 
 function WeeklySummary({ entries, lang }) {
-  const improved = mostImprovedTag(entries);
-  const improvedLabel = improved ? tt(improved.replace(" ↑", ""), lang) : null;
+  const topCategory = mostTrainedCategory(entries);
+  const topCategoryLabel = topCategory ? tc(topCategory, lang) : null;
   return (
     <div className="bg-neutral-900 border border-red-900 rounded-xl p-3 mb-4">
       <div className="flex items-center gap-1.5 mb-1">
@@ -437,12 +439,8 @@ function WeeklySummary({ entries, lang }) {
       </div>
       <p className="text-neutral-300 text-xs leading-relaxed">
         {lang === "en"
-          ? `You completed ${entries.length} sessions this week.${
-              improvedLabel ? ` Your most improved area: ${improvedLabel}.` : " Keep logging sessions and your AI coach will start spotting patterns."
-            }`
-          : `Bu hafta ${entries.length} seans tamamladın.${
-              improvedLabel ? ` En çok gelişen alanın: ${improvedLabel}.` : " Seans kaydettikçe AI koç örüntüleri çıkarmaya başlayacak."
-            }`}
+          ? `You completed ${entries.length} sessions this week.${topCategoryLabel ? ` Most trained area: ${topCategoryLabel}.` : ""}`
+          : `Bu hafta ${entries.length} seans tamamladın.${topCategoryLabel ? ` En çok çalıştığın alan: ${topCategoryLabel}.` : ""}`}
       </p>
     </div>
   );
@@ -479,8 +477,8 @@ function WeeklyArchive({ entries, lang }) {
       <p className="text-neutral-500 text-xs mb-2">{t(lang, "weeklyArchiveLabel")}</p>
       <div className="flex flex-col gap-2">
         {pastWeeks.map((w) => {
-          const improved = mostImprovedTag(w.entries);
-          const improvedLabel = improved ? tt(improved.replace(" ↑", ""), lang) : null;
+          const topCategory = mostTrainedCategory(w.entries);
+          const topCategoryLabel = topCategory ? tc(topCategory, lang) : null;
           const weekEnd = w.weekStart + 6 * DAY_MS;
           const isOpen = openWeek === w.weekStart;
           const weekEntriesSorted = [...w.entries].sort((a, b) => b.createdAt - a.createdAt);
@@ -505,9 +503,9 @@ function WeeklyArchive({ entries, lang }) {
                     />
                   </div>
                 </div>
-                {improvedLabel && (
+                {topCategoryLabel && (
                   <p className="text-neutral-500 text-[11px] mt-1">
-                    {t(lang, "mostImprovedShortLabel")}: {improvedLabel}
+                    {t(lang, "mostTrainedShortLabel")}: {topCategoryLabel}
                   </p>
                 )}
               </button>
