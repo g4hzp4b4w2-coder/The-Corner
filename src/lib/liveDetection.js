@@ -31,20 +31,23 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-const PUNCH_COOLDOWN_MS = 250;
+const PUNCH_COOLDOWN_MS = 300;
 const MAX_MOVE_MS = 700; // a "moving" burst longer than this without settling isn't a punch
 // Speed is in shoulder-widths per second, so it scales with distance from
-// the camera. Needs a real burst to start counting, and has to actually
-// settle back down (not just dip) before it can count again.
+// the camera.
 const MOVE_SPEED_ON = 2.0;
-const MOVE_SPEED_OFF = 0.8;
-// Speed dips briefly near zero right at full extension, before the arm
-// reverses to retract — without this, that natural inflection point got
-// misread as "movement over" and the retraction counted as a second
-// punch. Speed has to stay below MOVE_SPEED_OFF continuously for this
-// long before a movement is considered actually finished, which folds
-// the whole out-and-back of one strike into a single counted punch.
-const SETTLE_MS = 110;
+// A real punch's speed dips at full extension before reversing, but
+// rarely goes anywhere near zero — the hand is still moving, just
+// changing direction. Trying to catch that "movement is over" moment
+// with a mid-range OFF threshold (and later a debounce timer on top of
+// it) proved impossible to tune: too high and the reversal itself got
+// counted as a second punch, too aggressive a fix and noisy retractions
+// missed the debounce window and got dropped entirely (both happened in
+// testing). Setting OFF very low sidesteps the problem instead of trying
+// to time it: only genuine near-stillness (hand actually resting back at
+// guard) closes the movement, so one full extend-and-retract naturally
+// stays a single movement throughout, including its mid-punch slowdown.
+const MOVE_SPEED_OFF = 0.35;
 // Minimum net distance the wrist has to travel from where the burst
 // started, in shoulder-widths — filters out jitter/guard adjustments
 // without requiring the large, straight-line reach the old distance-based
@@ -76,7 +79,6 @@ function initArmState() {
     moveStartWrist: null,
     peakDist: 0,
     peakWrist: null,
-    belowOffSinceT: null,
     lastPunchT: -Infinity,
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
@@ -123,7 +125,6 @@ export function createPunchDetector() {
               arm.moveStartWrist = { x: arm.prevWrist.x, y: arm.prevWrist.y };
               arm.peakDist = 0;
               arm.peakWrist = { x: wr.x, y: wr.y };
-              arm.belowOffSinceT = null;
             }
           } else {
             const distFromStart = dist(wr, arm.moveStartWrist) / shoulderWidth;
@@ -132,27 +133,13 @@ export function createPunchDetector() {
               arm.peakWrist = { x: wr.x, y: wr.y };
             }
 
-            if (speed < MOVE_SPEED_OFF) {
-              if (arm.belowOffSinceT == null) arm.belowOffSinceT = t;
-            } else {
-              arm.belowOffSinceT = null;
-            }
-
             const tooLong = t - arm.moveStartT > MAX_MOVE_MS;
-            const settled = arm.belowOffSinceT != null && t - arm.belowOffSinceT > SETTLE_MS;
-            if (settled || tooLong) {
-              // A noisy retraction can miss a clean SETTLE_MS window and
-              // only close out via the tooLong fallback — that must not
-              // disqualify an otherwise real punch (this exact bug dropped
-              // detection to near zero in testing: almost every punch hit
-              // tooLong instead of settled, and used to get thrown away
-              // here regardless of how far the wrist had actually moved).
+            if (speed < MOVE_SPEED_OFF || tooLong) {
               if (arm.peakDist > MIN_PUNCH_DISPLACEMENT) {
                 events.push({ type: "punch", side, style: classifyStyle(arm.moveStartWrist, arm.peakWrist, shoulderWidth), t });
                 arm.lastPunchT = t;
               }
               arm.state = "idle";
-              arm.belowOffSinceT = null;
             }
           }
         }
