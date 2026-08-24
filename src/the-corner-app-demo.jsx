@@ -143,6 +143,7 @@ const translations = {
     en: "This currently shows your own self-assessment. As you log sessions, real progress tracking will start here.",
   },
   loadErrorNote: { tr: "Veriler yüklenirken bir sorun oldu.", en: "There was a problem loading your data." },
+  retryLabel: { tr: "Tekrar dene", en: "Try again" },
   privacyNote: {
     tr: "Günlüğün sadece sana özel saklanır. Topluluk paylaşımları hesabı olan herkese açıktır.",
     en: "Your journal is stored privately, just for you. Community posts are visible to everyone with an account.",
@@ -2454,6 +2455,7 @@ export default function TheCornerApp() {
   const [showForm, setShowForm] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const [lang, setLang] = useState("tr");
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
@@ -2491,6 +2493,12 @@ export default function TheCornerApp() {
         setPosts(communityPosts);
         if (profile?.lang) setLang(profile.lang);
       } catch (e) {
+        // A transient failure here (flaky connection on app open, etc.) must
+        // never be mistaken for "this user has no profile yet" — profileInfo
+        // stays whatever it already was (null on first load), so the render
+        // below has to check loadError before falling back to onboarding,
+        // or a network blip would show the onboarding form to an existing
+        // user and risk overwriting their real profile if they submitted it.
         if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setDataLoading(false);
@@ -2499,7 +2507,7 @@ export default function TheCornerApp() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, retryTick]);
 
   const addEntry = async ({ type, categories, duration, note, blocks }) => {
     const entry = await addJournalEntry(session.user.id, { label: "Şimdi", type, categories, duration, note, blocks, tags: [], hasVideo: false });
@@ -2660,6 +2668,22 @@ export default function TheCornerApp() {
     return (
       <AppShell lang={lang} onToggleLang={toggleLang}>
         <AuthScreen lang={lang} />
+      </AppShell>
+    );
+  }
+
+  if (!profileInfo && loadError) {
+    return (
+      <AppShell lang={lang} onToggleLang={toggleLang}>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-neutral-300 text-sm">{t(lang, "loadErrorNote")}</p>
+          <button
+            onClick={() => setRetryTick((n) => n + 1)}
+            className="bg-red-600 hover:bg-red-500 text-neutral-950 text-xs font-medium rounded-lg px-4 py-2 transition-colors"
+          >
+            {t(lang, "retryLabel")}
+          </button>
+        </div>
       </AppShell>
     );
   }
