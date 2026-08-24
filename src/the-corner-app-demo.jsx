@@ -386,7 +386,7 @@ function Header({ lang, onToggleLang }) {
             >
               THE CORNER
             </p>
-            <p className="text-neutral-600 text-[10px] mt-0.5">@TheCornerBoxing</p>
+            <p className="text-neutral-600 text-[10px] mt-0.5 tracking-widest uppercase">Fighter's Hub</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
