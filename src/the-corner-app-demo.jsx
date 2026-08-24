@@ -65,6 +65,10 @@ const translations = {
 
   // Weekly summary / coach tip / streak
   weeklySummaryLabel: { tr: "Haftalık özet", en: "Weekly summary" },
+  weeklyArchiveLabel: { tr: "Haftalık arşiv", en: "Weekly archive" },
+  weeklyArchiveEmpty: { tr: "Henüz geçmiş bir hafta yok.", en: "No past weeks yet." },
+  sessionsUnitLabel: { tr: "seans", en: "sessions" },
+  mostImprovedShortLabel: { tr: "En çok gelişen", en: "Most improved" },
   trendChartTitle: { tr: "Son 8 hafta", en: "Last 8 weeks" },
   categoryChartTitle: { tr: "Son 4 hafta · kategori dağılımı", en: "Last 4 weeks · category breakdown" },
   chartEmptyState: { tr: "Henüz gösterecek veri yok, birkaç seans kaydet.", en: "Not enough data yet — log a few sessions." },
@@ -440,6 +444,62 @@ function WeeklySummary({ entries, lang }) {
               improvedLabel ? ` En çok gelişen alanın: ${improvedLabel}.` : " Seans kaydettikçe AI koç örüntüleri çıkarmaya başlayacak."
             }`}
       </p>
+    </div>
+  );
+}
+
+function computeWeeklyArchive(entries) {
+  const byWeek = new Map();
+  entries.forEach((e) => {
+    const weekStart = startOfWeek(e.createdAt);
+    if (!byWeek.has(weekStart)) byWeek.set(weekStart, []);
+    byWeek.get(weekStart).push(e);
+  });
+  return [...byWeek.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([weekStart, weekEntries]) => ({ weekStart, entries: weekEntries }));
+}
+
+function WeeklyArchive({ entries, lang }) {
+  const currentWeekStart = startOfWeek(Date.now());
+  const pastWeeks = computeWeeklyArchive(entries).filter((w) => w.weekStart < currentWeekStart);
+
+  if (pastWeeks.length === 0) {
+    return (
+      <div className="mb-4">
+        <p className="text-neutral-500 text-xs mb-2">{t(lang, "weeklyArchiveLabel")}</p>
+        <p className="text-neutral-700 text-xs">{t(lang, "weeklyArchiveEmpty")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4">
+      <p className="text-neutral-500 text-xs mb-2">{t(lang, "weeklyArchiveLabel")}</p>
+      <div className="flex flex-col gap-2">
+        {pastWeeks.map((w) => {
+          const improved = mostImprovedTag(w.entries);
+          const improvedLabel = improved ? tt(improved.replace(" ↑", ""), lang) : null;
+          const weekEnd = w.weekStart + 6 * DAY_MS;
+          return (
+            <div key={w.weekStart} className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-300 text-xs font-medium">
+                  {formatShortDate(w.weekStart, lang)} – {formatShortDate(weekEnd, lang)}
+                </span>
+                <span className="text-neutral-500 text-[11px]">
+                  {w.entries.length} {t(lang, "sessionsUnitLabel")}
+                </span>
+              </div>
+              {improvedLabel && (
+                <p className="text-neutral-500 text-[11px] mt-1">
+                  {t(lang, "mostImprovedShortLabel")}: {improvedLabel}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1570,6 +1630,8 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
 
       <p className="text-neutral-500 text-xs mb-2">{t(lang, "badgesLabel")}</p>
       <BadgeGrid entries={entries} lang={lang} onShare={onShareAchievement} />
+
+      <WeeklyArchive entries={entries} lang={lang} />
 
       <p className="text-neutral-500 text-xs mb-1">{t(lang, "categoryLevelLabel")}</p>
       <p className="text-neutral-600 text-[11px] mb-2">{t(lang, "categoryLevelNote")}</p>
