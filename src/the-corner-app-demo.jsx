@@ -341,13 +341,7 @@ function CornerMark({ width = 30 }) {
 function BoxingGloveLoader({ size = 40, label, compact = false }) {
   return (
     <div className={`flex flex-col items-center justify-center gap-2 ${compact ? "py-1" : "py-6"}`}>
-      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className="glove-punch" role="img" aria-label="Yükleniyor">
-        <rect x="13" y="38" width="30" height="18" rx="7" fill="#b91c1c" stroke="#7f1d1d" strokeWidth="1.5" />
-        <line x1="19" y1="45" x2="37" y2="45" stroke="#7f1d1d" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="19" y1="50" x2="37" y2="50" stroke="#7f1d1d" strokeWidth="1.5" strokeLinecap="round" />
-        <ellipse cx="26" cy="24" rx="17" ry="15" fill="#dc2626" stroke="#7f1d1d" strokeWidth="1.5" />
-        <ellipse cx="40" cy="23" rx="8.5" ry="10" fill="#dc2626" stroke="#7f1d1d" strokeWidth="1.5" transform="rotate(-15 40 23)" />
-      </svg>
+      <img src="/logo-mark.png" width={size} className="glove-punch" style={{ height: "auto", display: "block" }} alt="Yükleniyor" />
       {label && <p className="text-neutral-600 text-xs">{label}</p>}
     </div>
   );
