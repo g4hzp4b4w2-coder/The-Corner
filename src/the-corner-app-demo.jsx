@@ -792,7 +792,7 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
           onSentToChat={() => setSubTab("chat")}
         />
       ) : (
-        <LiveTrainingTab lang={lang} />
+        <LiveTrainingTab userId={userId} lang={lang} />
       )}
     </div>
   );
