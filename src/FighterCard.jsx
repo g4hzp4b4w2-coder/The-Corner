@@ -344,18 +344,13 @@ async function drawCard({
   drawStatTile(ctx, pad, y, tileW, tileH, c("totalSessions", lang), String(totalSessions));
   drawStatTile(ctx, pad + tileW + tileGap, y, tileW, tileH, c("longestStreak", lang), String(longestStreak));
   drawStatTile(ctx, pad + (tileW + tileGap) * 2, y, tileW, tileH, c("topSkill", lang), topSkillLabel);
-  y += tileH + 44;
+  y += tileH + pad;
 
-  const footerH = CARD_H - y;
-  ctx.fillStyle = "#dc2626";
-  ctx.fillRect(0, y, CARD_W, footerH);
-  ctx.fillStyle = "#0a0a0a";
-  ctx.font = '700 30px "Space Grotesk"';
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "center";
-  ctx.fillText("THE CORNER", CARD_W / 2, y + footerH / 2);
-
-  return canvas;
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = CARD_W;
+  outCanvas.height = y;
+  outCanvas.getContext("2d").drawImage(canvas, 0, 0, CARD_W, y, 0, 0, CARD_W, y);
+  return outCanvas;
 }
 
 function downloadBlob(blob) {
