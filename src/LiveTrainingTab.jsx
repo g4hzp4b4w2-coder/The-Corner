@@ -32,11 +32,11 @@ function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
 }
 
-export default function LiveTrainingTab({ userId, lang }) {
+export default function LiveTrainingTab({ lang }) {
   const [mode, setMode] = useState(null);
 
   if (mode === "shadow") {
-    return <ShadowBoxingMode userId={userId} lang={lang} onBack={() => setMode(null)} />;
+    return <ShadowBoxingMode lang={lang} onBack={() => setMode(null)} />;
   }
 
   return (

@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, X, Minus, Plus } from "lucide-react";
 import { createPoseSession, drawSkeletons } from "./lib/poseAnalysis";
 import { createPunchDetector } from "./lib/liveDetection";
-import { createCalibrationSession, CALIB_STEPS } from "./lib/punchCalibration";
-import { playGong, playTick } from "./lib/gongSound";
-import { getPunchCalibration, savePunchCalibration } from "./lib/db";
+import { playGong } from "./lib/gongSound";
 
 const STYLE_LABEL = {
   straight: { tr: "Düz", en: "Straight" },
@@ -21,23 +19,14 @@ const PREP_MS = 5000;
 
 const COPY = {
   subtitle: {
-    tr: "Kaç raund çalışacaksın ve raund süresi ne kadar olsun? Başlamadan önce sayımı sana göre ayarlamak için birkaç örnek vuruş isteyeceğiz.",
-    en: "How many rounds, and how long should each one be? Before starting, we'll ask for a few sample punches to calibrate counting to you.",
-  },
-  subtitleCalibrated: {
-    tr: "Kaç raund çalışacaksın ve raund süresi ne kadar olsun? Kalibrasyonun kayıtlı, direkt başlayabilirsin.",
-    en: "How many rounds, and how long should each one be? Your calibration is saved, so you can jump right in.",
+    tr: "Kaç raund çalışacaksın ve raund süresi ne kadar olsun?",
+    en: "How many rounds, and how long should each one be?",
   },
   roundsLabel: { tr: "Raund sayısı", en: "Number of rounds" },
   roundDurationLabel: { tr: "Raund süresi", en: "Round duration" },
   minuteShort: { tr: "dk", en: "min" },
   startLabel: { tr: "Başla", en: "Start" },
-  calibSavedLabel: { tr: "Kalibrasyon kayıtlı", en: "Calibration saved" },
-  recalibrateLabel: { tr: "Yeniden kalibre et", en: "Recalibrate" },
-  recalibrateOnLabel: { tr: "Bu seansta yeniden kalibre edilecek", en: "Will recalibrate this session" },
   prepLabel: { tr: "Hazırlan, kamerayı yerleştir", en: "Get ready, set up the camera" },
-  calibReadyLabel: { tr: "Hazır ol", en: "Get ready" },
-  calibGoLabel: { tr: "ŞİMDİ AT!", en: "THROW NOW!" },
   roundLabel: { tr: "Raund", en: "Round" },
   permissionDenied: {
     tr: "Kamera izni verilmedi. Tarayıcı ayarlarından bu site için kameraya izin ver.",
@@ -110,7 +99,7 @@ function StatsGrid({ stats, lang }) {
   );
 }
 
-export default function ShadowBoxingMode({ userId, lang, onBack }) {
+export default function ShadowBoxingMode({ lang, onBack }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -122,13 +111,8 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
   const phaseEndRef = useRef(0);
   const lastCountdownRef = useRef(-1);
   const roundStatsRef = useRef({ ...emptyRoundStats });
-  const calibSessionRef = useRef(null);
-  const calibrationRef = useRef(null);
-  const calibIndexRef = useRef(0);
-  const savedCalibrationRef = useRef(null);
-  const skipCalibrationRef = useRef(false);
 
-  // setup | prep | calib-leadin | calib-capture | round | roundEnd | sessionEnd
+  // setup | prep | round | roundEnd | sessionEnd
   const [phase, setPhase] = useState("setup");
   const [roundCount, setRoundCount] = useState(3);
   const [roundDuration, setRoundDuration] = useState(180);
@@ -138,9 +122,6 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
   const [events, setEvents] = useState([]);
   const [guardWarning, setGuardWarning] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [calibStepIndex, setCalibStepIndex] = useState(0);
-  const [hasSavedCalibration, setHasSavedCalibration] = useState(false);
-  const [forceRecalibrate, setForceRecalibrate] = useState(false);
   const [error, setError] = useState("");
 
   const teardownCamera = () => {
@@ -154,21 +135,6 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
   };
 
   useEffect(() => teardownCamera, []);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    getPunchCalibration(userId)
-      .then((saved) => {
-        if (cancelled || !saved) return;
-        savedCalibrationRef.current = saved;
-        setHasSavedCalibration(true);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
 
   const handleEvents = (newEvents) => {
     if (newEvents.length === 0) return;
@@ -199,37 +165,8 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
     setPhase("prep");
   };
 
-  // Steps through CALIB_STEPS one at a time (lead-in, then a capture
-  // window per step); once every step is done, turns the recording into
-  // a calibration profile and moves straight into round 1.
-  const beginCalibLeadIn = (index) => {
-    if (index >= CALIB_STEPS.length) {
-      const profile = calibSessionRef.current?.finish() || null;
-      calibrationRef.current = profile;
-      if (profile && userId) {
-        savedCalibrationRef.current = profile;
-        setHasSavedCalibration(true);
-        savePunchCalibration(userId, profile).catch(() => {});
-      }
-      beginRound(1);
-      return;
-    }
-    calibIndexRef.current = index;
-    setCalibStepIndex(index);
-    phaseEndRef.current = performance.now() + CALIB_STEPS[index].leadInMs;
-    phaseRef.current = "calib-leadin";
-    setPhase("calib-leadin");
-  };
-
-  const beginCalibCapture = (index) => {
-    playTick();
-    phaseEndRef.current = performance.now() + CALIB_STEPS[index].captureMs;
-    phaseRef.current = "calib-capture";
-    setPhase("calib-capture");
-  };
-
   const beginRound = (roundNumber) => {
-    detectorRef.current = createPunchDetector(calibrationRef.current);
+    detectorRef.current = createPunchDetector();
     roundStatsRef.current = { ...emptyRoundStats };
     setRoundStats({ ...emptyRoundStats });
     setEvents([]);
@@ -265,14 +202,6 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
   const startTraining = async () => {
     setError("");
     setRoundsHistory([]);
-    skipCalibrationRef.current = !!(savedCalibrationRef.current && !forceRecalibrate);
-    if (skipCalibrationRef.current) {
-      calibrationRef.current = savedCalibrationRef.current;
-    } else {
-      calibSessionRef.current = createCalibrationSession();
-      calibrationRef.current = null;
-    }
-    setForceRecalibrate(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       streamRef.current = stream;
@@ -301,8 +230,7 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
 
         const now = performance.now();
         const currentPhase = phaseRef.current;
-        const timedPhase =
-          currentPhase === "prep" || currentPhase === "calib-leadin" || currentPhase === "calib-capture" || currentPhase === "round";
+        const timedPhase = currentPhase === "prep" || currentPhase === "round";
 
         if (timedPhase) {
           const remainingMs = phaseEndRef.current - now;
@@ -315,17 +243,9 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
             if (currentPhase === "round") {
               const newEvents = detectorRef.current.update(people[0] || null, now);
               handleEvents(newEvents);
-            } else if (currentPhase === "calib-capture") {
-              const step = CALIB_STEPS[calibIndexRef.current];
-              calibSessionRef.current?.recordFrame(step.key, step.side, people[0] || null, now);
             }
           } else if (currentPhase === "prep") {
-            if (skipCalibrationRef.current) beginRound(1);
-            else beginCalibLeadIn(0);
-          } else if (currentPhase === "calib-leadin") {
-            beginCalibCapture(calibIndexRef.current);
-          } else if (currentPhase === "calib-capture") {
-            beginCalibLeadIn(calibIndexRef.current + 1);
+            beginRound(1);
           } else {
             endRound();
           }
@@ -342,11 +262,9 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
     }
   };
 
-  const cameraPhases =
-    phase === "prep" || phase === "calib-leadin" || phase === "calib-capture" || phase === "round" || phase === "roundEnd";
+  const cameraPhases = phase === "prep" || phase === "round" || phase === "roundEnd";
   const lastRound = roundsHistory[roundsHistory.length - 1];
   const totals = sumStats(roundsHistory);
-  const calibStep = CALIB_STEPS[calibStepIndex];
 
   return (
     <div className="flex flex-col" style={{ minHeight: 420 }}>
@@ -362,9 +280,7 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
             <ChevronLeft size={18} />
           </button>
         )}
-        <p className="text-neutral-500 text-xs">
-          {phase === "setup" ? c(hasSavedCalibration && !forceRecalibrate ? "subtitleCalibrated" : "subtitle", lang) : ""}
-        </p>
+        <p className="text-neutral-500 text-xs">{phase === "setup" ? c("subtitle", lang) : ""}</p>
       </div>
 
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
@@ -407,20 +323,6 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
             </div>
           </div>
 
-          {hasSavedCalibration && (
-            <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-              <span className="text-neutral-400 text-xs">
-                {forceRecalibrate ? c("recalibrateOnLabel", lang) : `${c("calibSavedLabel", lang)} ✓`}
-              </span>
-              <button
-                onClick={() => setForceRecalibrate((v) => !v)}
-                className={`text-xs ${forceRecalibrate ? "text-neutral-500" : "text-red-500"}`}
-              >
-                {forceRecalibrate ? (lang === "en" ? "Cancel" : "Vazgeç") : c("recalibrateLabel", lang)}
-              </button>
-            </div>
-          )}
-
           <button
             onClick={startTraining}
             className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
@@ -460,26 +362,6 @@ export default function ShadowBoxingMode({ userId, lang, onBack }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
             <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
             <span className="text-neutral-400 text-xs">{c("prepLabel", lang)}</span>
-          </div>
-        )}
-
-        {phase === "calib-leadin" && calibStep && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-neutral-950/60">
-            <span className="text-neutral-500 text-[11px]">
-              {calibStepIndex + 1}/{CALIB_STEPS.length}
-            </span>
-            <span className="text-neutral-300 text-2xl font-medium">{calibStep.label[lang] || calibStep.label.tr}</span>
-            <span className="text-neutral-500 text-xs">{c("calibReadyLabel", lang)}</span>
-          </div>
-        )}
-
-        {phase === "calib-capture" && calibStep && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-red-950/50">
-            <span className="text-neutral-500 text-[11px]">
-              {calibStepIndex + 1}/{CALIB_STEPS.length}
-            </span>
-            <span className="text-neutral-100 text-2xl font-medium">{calibStep.label[lang] || calibStep.label.tr}</span>
-            <span className="text-red-400 text-sm font-medium">{c("calibGoLabel", lang)}</span>
           </div>
         )}
 

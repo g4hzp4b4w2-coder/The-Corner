@@ -37,17 +37,6 @@ export async function deleteProfile(userId) {
   if (error) throw error;
 }
 
-export async function getPunchCalibration(userId) {
-  const { data, error } = await supabase.from("profiles").select("punch_calibration").eq("user_id", userId).maybeSingle();
-  if (error) throw error;
-  return data?.punch_calibration || null;
-}
-
-export async function savePunchCalibration(userId, calibration) {
-  const { error } = await supabase.from("profiles").upsert({ user_id: userId, punch_calibration: calibration });
-  if (error) throw error;
-}
-
 function rowToEntry(row) {
   return {
     id: row.id,

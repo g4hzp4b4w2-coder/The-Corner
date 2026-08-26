@@ -37,25 +37,3 @@ export function playGong() {
     // unsupported browser shouldn't break the round flow.
   }
 }
-
-// A short, higher-pitched blip — marks the exact instant to throw during
-// guided calibration, so the user isn't stuck watching text to time it.
-export function playTick() {
-  try {
-    const ctx = getContext();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.25, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.16);
-  } catch (e) {
-    // Same as above — not critical to the flow.
-  }
-}
