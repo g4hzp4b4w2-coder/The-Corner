@@ -12,28 +12,41 @@
 //        real punches whose retraction was too noisy to close out
 //        cleanly. Rewritten around counting on the RISING edge instead —
 //        much more stable — but a universal speed threshold still
-//        couldn't fit everyone's body/speed/camera distance: 62 thrown
-//        scored 38, then a smoothing fix pushed the same setup to 96.
-//   v3 — this version. Two changes: (1) thresholds come from a short
-//        per-person calibration (see punchCalibration.js) instead of one
-//        guessed constant; (2) counting is based on a punch's PROMINENCE
-//        — how far a peak stands above the most recent valley — rather
-//        than an absolute "did speed cross this exact number" test. That
-//        matters for combinations specifically: back-to-back punches
-//        don't fully reset between each other the way an isolated punch
-//        does, so an absolute rearm threshold tuned for a full reset was
-//        always going to miss real combo punches. Prominence is relative
-//        to whatever the valley actually was, so it holds up whether
-//        that valley was a full stop or just a brief dip mid-combination.
+//        couldn't fit everyone's body/speed/camera distance.
+//   v3 — added a short guided per-person calibration (throw a labeled
+//        jab/hook/uppercut on cue) and derived fixed thresholds from it.
+//        This did not converge even after several honest attempts (a
+//        single combo-derived sample swung wildly; switching to the
+//        median of 6 isolated punches still swung wildly: 84/104,
+//        73/13 across consecutive real tests). The actual problem: a
+//        deliberate, isolated "now throw a left hook" demo punch is a
+//        different kind of motion than a real punch thrown mid-round —
+//        tired, half-committed, thrown as part of a combo, used to find
+//        range. No fixed number derived from a small demo sample
+//        generalizes to that whole range of real intensity.
+//   v4 — this version. Removed calibration entirely. Instead of trying to
+//        guess the right threshold up front, the detector adapts
+//        continuously: it keeps a rolling window of this person's own
+//        recent confirmed punches (from THIS session, THIS round) and
+//        sets the floor/prominence bar as a fraction of their recent
+//        median — so it tracks whatever this person's punches actually
+//        look like right now, tired or fresh, jab or power shot, instead
+//        of a number fixed before the round even started.
 
 import { NOSE, WRIST, relWrist, shoulderWidthOf, visible, dist } from "./poseMath";
 
-// Generic fallback thresholds, used only if a session has no calibration
-// profile (or calibration didn't get usable data for some reason).
-// Rough estimates from prior testing — a personalized calibration should
-// beat these for most people.
-const DEFAULT_FLOOR = 1.1;
-const DEFAULT_PROMINENCE = 0.9;
+// Used for the first few punches of a session, before there's enough
+// history to adapt to — deliberately generous, since missing early
+// punches is worse than an occasional early false positive (the running
+// baseline corrects itself quickly either way).
+const BOOTSTRAP_FLOOR = 0.9;
+const BOOTSTRAP_PROMINENCE = 0.7;
+// Once enough real punches have been seen, floor/prominence become this
+// fraction of the recent median confirmed-peak speed — tracks the
+// person's actual current intensity instead of a number fixed up front.
+const ADAPT_RATIO = 0.4;
+const MIN_SAMPLES_TO_ADAPT = 3;
+const ROLLING_WINDOW = 12;
 
 // How long a candidate peak has to hold without being beaten before it's
 // confirmed as real and evaluated — adds this much latency to when a
@@ -53,13 +66,13 @@ const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
 const GUARD_DROP_COOLDOWN_MS = 1500;
 
-const GENERIC_TEMPLATES = {
+const STYLE_TEMPLATES = {
   straight: { x: 0.3, y: 0 },
   hook: { x: 0.9, y: 0 },
   uppercut: { x: 0.2, y: -0.9 },
 };
 
-function classifyStyle(dir, templates) {
+function classifyStyle(dir) {
   const shaped = { x: Math.abs(dir.x), y: dir.y };
   const mag = Math.hypot(shaped.x, shaped.y) || 1;
   const unit = { x: shaped.x / mag, y: shaped.y / mag };
@@ -67,7 +80,7 @@ function classifyStyle(dir, templates) {
   let best = "straight";
   let bestScore = -Infinity;
   for (const style of ["straight", "hook", "uppercut"]) {
-    const t = templates[style] || GENERIC_TEMPLATES[style];
+    const t = STYLE_TEMPLATES[style];
     const tShaped = { x: Math.abs(t.x), y: t.y };
     const tMag = Math.hypot(tShaped.x, tShaped.y) || 1;
     const score = (unit.x * tShaped.x + unit.y * tShaped.y) / tMag; // cosine similarity
@@ -77,6 +90,12 @@ function classifyStyle(dir, templates) {
     }
   }
   return best;
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function initArmState() {
@@ -95,19 +114,24 @@ function initArmState() {
   };
 }
 
-// Returns a fresh detector with its own per-arm state machine. Pass the
-// result of punchCalibration.js's finish() as `calibration` to use
-// personalized thresholds; pass null/undefined to fall back to generic
-// constants. Call update(landmarks, t) once per frame with the current
-// single-person landmarks and a monotonically increasing timestamp in ms
-// (e.g. performance.now()); it returns any events that just happened.
-export function createPunchDetector(calibration) {
-  const floorThreshold = calibration?.floorThreshold ?? DEFAULT_FLOOR;
-  const minProminence = calibration?.minProminence ?? DEFAULT_PROMINENCE;
-  const templates = calibration?.templates ?? {};
-
+// Returns a fresh detector with its own per-arm state machine and its own
+// adaptive baseline (shared between both arms — punch intensity is a
+// property of the person/fatigue right now, not which arm). Call
+// update(landmarks, t) once per frame with the current single-person
+// landmarks and a monotonically increasing timestamp in ms (e.g.
+// performance.now()); it returns any events that just happened.
+export function createPunchDetector() {
   const arms = { left: initArmState(), right: initArmState() };
   let shoulderWidth = 0.2;
+  const recentPeaks = [];
+
+  function currentThresholds() {
+    if (recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
+      return { floor: BOOTSTRAP_FLOOR, prominence: BOOTSTRAP_PROMINENCE };
+    }
+    const baseline = median(recentPeaks) * ADAPT_RATIO;
+    return { floor: baseline, prominence: baseline };
+  }
 
   function update(landmarks, t) {
     const events = [];
@@ -133,11 +157,14 @@ export function createPunchDetector(calibration) {
               arm.peakRel = { ...rel };
             }
             if (t - arm.curMaxT > CONFIRM_DELAY_MS) {
-              const prominence = arm.curMax - arm.curMin;
-              if (arm.curMax > floorThreshold && prominence > minProminence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
+              const { floor, prominence } = currentThresholds();
+              const gotProminence = arm.curMax - arm.curMin;
+              if (arm.curMax > floor && gotProminence > prominence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
                 const dir = { x: arm.peakRel.x - arm.valleyRel.x, y: arm.peakRel.y - arm.valleyRel.y };
-                events.push({ type: "punch", side, style: classifyStyle(dir, templates), t: arm.curMaxT });
+                events.push({ type: "punch", side, style: classifyStyle(dir), t: arm.curMaxT });
                 arm.lastPeakT = arm.curMaxT;
+                recentPeaks.push(arm.curMax);
+                if (recentPeaks.length > ROLLING_WINDOW) recentPeaks.shift();
               }
               arm.resolved = true;
               arm.curMin = speed;
