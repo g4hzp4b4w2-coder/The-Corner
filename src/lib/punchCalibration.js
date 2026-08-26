@@ -139,11 +139,16 @@ export function createCalibrationSession() {
       .filter((v) => v > 0);
     if (peakSpeeds.length === 0) return null;
 
+    // Real test with these multipliers at 0.45/0.75 overcounted by ~24%
+    // (84 thrown, 104 counted) — raised to be more conservative. People
+    // tend to throw calibration's sample punches a bit more carefully/
+    // slower than they do mid-round, so thresholds derived straight from
+    // calibration without margin ran looser than a real round needs.
     const weakestPeak = Math.min(...peakSpeeds);
-    const floorThreshold = weakestPeak * 0.45;
+    const floorThreshold = weakestPeak * 0.55;
 
     const comboDip = analyzeCombo(recordings["combo"] || [], floorThreshold);
-    const minProminence = comboDip != null ? comboDip * 0.75 : weakestPeak * 0.4;
+    const minProminence = comboDip != null ? comboDip * 1.1 : weakestPeak * 0.55;
 
     return {
       floorThreshold,
