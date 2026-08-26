@@ -759,7 +759,7 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
   const [subTab, setSubTab] = useState("chat");
 
   return (
-    <div className="px-5 pb-5">
+    <div className="px-5 pb-5 flex-1 flex flex-col min-h-0">
       <p className="text-neutral-100 text-base font-medium mb-3">{t(lang, "navCoach")}</p>
 
       <div className="flex bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 mb-3">
@@ -789,20 +789,22 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
         </button>
       </div>
 
-      {subTab === "chat" ? (
-        <CoachChat userId={userId} profileInfo={profileInfo} entries={entries} lang={lang} />
-      ) : subTab === "video" ? (
-        <VideoAnalysisTab
-          userId={userId}
-          profileInfo={profileInfo}
-          entries={entries}
-          lang={lang}
-          onSaveVideoAnalysis={onSaveVideoAnalysis}
-          onSentToChat={() => setSubTab("chat")}
-        />
-      ) : (
-        <LiveTrainingTab lang={lang} />
-      )}
+      <div className="flex-1 flex flex-col min-h-0">
+        {subTab === "chat" ? (
+          <CoachChat userId={userId} profileInfo={profileInfo} entries={entries} lang={lang} />
+        ) : subTab === "video" ? (
+          <VideoAnalysisTab
+            userId={userId}
+            profileInfo={profileInfo}
+            entries={entries}
+            lang={lang}
+            onSaveVideoAnalysis={onSaveVideoAnalysis}
+            onSentToChat={() => setSubTab("chat")}
+          />
+        ) : (
+          <LiveTrainingTab lang={lang} />
+        )}
+      </div>
     </div>
   );
 }

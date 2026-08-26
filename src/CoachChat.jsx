@@ -76,10 +76,10 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
   };
 
   return (
-    <div className="flex flex-col" style={{ minHeight: 420 }}>
+    <div className="flex-1 flex flex-col min-h-0">
       <p className="text-neutral-500 text-xs mb-3">{c("subtitle", lang)}</p>
 
-      <div className="flex-1 flex flex-col gap-2.5 mb-3 overflow-y-auto" style={{ maxHeight: 380 }}>
+      <div className="flex-1 flex flex-col gap-2.5 mb-3 overflow-y-auto min-h-0">
         {loadingHistory ? (
           <p className="text-neutral-600 text-xs animate-pulse">···</p>
         ) : messages.length === 0 ? (
