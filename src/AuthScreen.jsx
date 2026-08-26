@@ -105,7 +105,7 @@ export default function AuthScreen({ lang }) {
   if (mode === "forgot") {
     return (
       <div className="px-5 py-10 flex-1 flex flex-col justify-center">
-        <p className="text-neutral-100 text-lg font-medium mb-1" style={{ fontFamily: "'Oswald', sans-serif" }}>
+        <p className="text-neutral-100 text-lg font-bold tracking-tight mb-1">
           {c("forgotTitle", lang)}
         </p>
         <p className="text-neutral-500 text-xs mb-5">{c("forgotSubtitle", lang)}</p>
@@ -148,7 +148,7 @@ export default function AuthScreen({ lang }) {
 
   return (
     <div className="px-5 py-10 flex-1 flex flex-col justify-center">
-      <p className="text-neutral-100 text-lg font-medium mb-1" style={{ fontFamily: "'Oswald', sans-serif" }}>
+      <p className="text-neutral-100 text-lg font-bold tracking-tight mb-1">
         {c("title", lang)}
       </p>
       <p className="text-neutral-500 text-xs mb-5">{c("subtitle", lang)}</p>
@@ -241,7 +241,7 @@ export function ResetPasswordForm({ lang, onDone }) {
 
   return (
     <div className="px-5 py-10 flex-1 flex flex-col justify-center">
-      <p className="text-neutral-100 text-lg font-medium mb-1" style={{ fontFamily: "'Oswald', sans-serif" }}>
+      <p className="text-neutral-100 text-lg font-bold tracking-tight mb-1">
         {c("newPasswordTitle", lang)}
       </p>
       <p className="text-neutral-500 text-xs mb-5">{c("newPasswordSubtitle", lang)}</p>

@@ -355,10 +355,16 @@ function BoxingGloveLoader({ size = 40, label, compact = false }) {
 
 function AppShell({ lang, onToggleLang, footer, children }) {
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center py-10">
+    // Full-bleed on phone widths (installed PWA / real device) — no
+    // border, no rounded corners, no centering gutter, so the app fills
+    // the actual screen instead of floating as a bounded card. Only
+    // widens into a centered "phone preview" frame at desktop widths
+    // (sm: and up), since stretching the real layout edge-to-edge on a
+    // 1920px monitor would just look broken.
+    <div className="min-h-screen bg-neutral-950 sm:flex sm:items-center sm:justify-center sm:py-10">
       <div
-        className="w-full max-w-sm bg-neutral-950 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col"
-        style={{ height: "min(640px, 92vh)" }}
+        className="w-full h-dvh sm:h-[min(640px,92vh)] sm:max-w-sm bg-neutral-950 sm:border sm:border-neutral-800 sm:rounded-3xl overflow-hidden flex flex-col"
+        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <Header lang={lang} onToggleLang={onToggleLang} />
         <div className="flex-1 overflow-y-auto flex flex-col">{children}</div>
@@ -376,16 +382,21 @@ function Header({ lang, onToggleLang }) {
         style={{ opacity: 0.18 }}
         aria-hidden="true"
       />
+      <div
+        className="pointer-events-none absolute top-0 left-0 w-16 h-16"
+        style={{
+          background: "repeating-linear-gradient(135deg, #dc2626 0 2px, transparent 2px 9px)",
+          opacity: 0.3,
+          WebkitMaskImage: "linear-gradient(135deg, black, transparent 75%)",
+          maskImage: "linear-gradient(135deg, black, transparent 75%)",
+        }}
+        aria-hidden="true"
+      />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <CornerMark width={32} />
           <div>
-            <p
-              className="text-neutral-100 text-lg leading-none tracking-wide"
-              style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 500 }}
-            >
-              THE CORNER
-            </p>
+            <p className="text-neutral-100 text-lg leading-none tracking-tight font-bold">THE CORNER</p>
             <p className="text-neutral-600 text-[10px] mt-0.5 tracking-widest uppercase">Fighter's Hub</p>
           </div>
         </div>
@@ -410,9 +421,7 @@ function StatCard({ label, value }) {
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 flex-1">
       <p className="text-neutral-500 text-xs">{label}</p>
-      <p className="text-neutral-100 text-xl mt-0.5" style={{ fontFamily: "'Oswald', sans-serif" }}>
-        {value}
-      </p>
+      <p className="text-neutral-100 text-xl mt-0.5 font-bold tracking-tight">{value}</p>
     </div>
   );
 }
@@ -434,10 +443,10 @@ function WeeklySummary({ entries, lang }) {
   const topCategory = mostTrainedCategory(entries);
   const topCategoryLabel = topCategory ? tc(topCategory, lang) : null;
   return (
-    <div className="bg-neutral-900 border border-red-900 rounded-xl p-3 mb-4">
+    <div className="bg-neutral-900 border border-red-900 p-3 mb-4" style={{ borderRadius: "6px 16px 6px 16px" }}>
       <div className="flex items-center gap-1.5 mb-1">
         <TrendingUp size={14} className="text-red-500" />
-        <span className="text-red-500 text-xs font-medium">{t(lang, "weeklySummaryLabel")}</span>
+        <span className="text-red-500 text-xs font-bold">{t(lang, "weeklySummaryLabel")}</span>
       </div>
       <p className="text-neutral-300 text-xs leading-relaxed">
         {lang === "en"
@@ -826,9 +835,18 @@ function JournalTab({ entries, onAddClick, onShareEntry, onDeleteEntry, lang }) 
       {entries.length > 0 && (
         <div className="flex flex-col gap-2.5 mb-4">
           {entries.map((e) => (
-            <div key={e.id} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-neutral-100 text-sm font-medium">
+            <div
+              key={e.id}
+              className="relative bg-neutral-900 border border-neutral-800 p-3 overflow-hidden"
+              style={{ borderRadius: "4px 16px 16px 16px" }}
+            >
+              <div
+                className="absolute top-0 left-0 w-5 h-5 bg-red-600"
+                style={{ borderRadius: "4px 0 16px 0", clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+                aria-hidden="true"
+              />
+              <div className="flex items-center justify-between mb-1.5 pl-2">
+                <span className="text-neutral-100 text-sm font-semibold">
                   {e.label} · {entryCategoryLabel(e, lang)}
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
@@ -2307,9 +2325,7 @@ function OnboardingForm({ onComplete, lang, initialData, onCancel }) {
 
   return (
     <div className="px-5 py-6 overflow-y-auto" style={{ maxHeight: 640 }}>
-      <p className="text-neutral-100 text-lg font-medium mb-1" style={{ fontFamily: "'Oswald', sans-serif" }}>
-        {t(lang, "onboardingTitle")}
-      </p>
+      <p className="text-neutral-100 text-lg font-bold tracking-tight mb-1">{t(lang, "onboardingTitle")}</p>
       <p className="text-neutral-500 text-xs mb-4">{t(lang, "onboardingSubtitle")}</p>
 
       <label className="text-neutral-500 text-xs block mb-1">{t(lang, "displayNameQuestion")}</label>
