@@ -9,12 +9,15 @@
 //      person's own punches, used to classify style by similarity instead
 //      of a fixed angle rule.
 //
-// The last step also captures a short freestyle combination — punches
-// thrown back-to-back don't fully reset the way an isolated punch does
-// (less time to retract, momentum carries over), so measuring the actual
-// dip between combo punches gives a much more realistic "how much does
-// speed really drop between punches in a real exchange" number than
-// assuming it behaves like isolated punches strung together.
+// An earlier version also captured a freestyle combination to measure how
+// much speed dips between back-to-back punches, and derived the live
+// prominence threshold from that. Dropped it — a single ~3.5s capture
+// turned out to be too noisy a sample on its own, and testing showed the
+// resulting threshold swinging wildly (one run undercounted by a quarter,
+// the next missed 70% of punches) purely from how that one combo happened
+// to be thrown. The 6 isolated-punch measurements below are individually
+// deliberate and clean, and there are enough of them to use a median —
+// a steadier basis than one noisy multi-punch sample.
 
 import { relWrist, shoulderWidthOf, dist } from "./poseMath";
 
@@ -25,7 +28,6 @@ export const CALIB_STEPS = [
   { key: "hook-right", side: "right", style: "hook", label: { tr: "Sağ kroşe", en: "Right hook" }, leadInMs: 900, captureMs: 1600 },
   { key: "uppercut-left", side: "left", style: "uppercut", label: { tr: "Sol aparkat", en: "Left uppercut" }, leadInMs: 900, captureMs: 1600 },
   { key: "uppercut-right", side: "right", style: "uppercut", label: { tr: "Sağ aparkat", en: "Right uppercut" }, leadInMs: 900, captureMs: 1600 },
-  { key: "combo", side: "both", style: null, label: { tr: "Serbest kombinasyon (3-4 vuruş)", en: "Free combination (3-4 punches)" }, leadInMs: 900, captureMs: 3500 },
 ];
 
 function speedSeriesFromRelSamples(samples) {
@@ -55,45 +57,10 @@ function analyzeIsolated(samples) {
   };
 }
 
-function findLocalPeaks(series, minGapMs, minSpeed) {
-  const peaks = [];
-  for (let i = 1; i < series.length - 1; i++) {
-    const s = series[i];
-    if (s.speed < minSpeed) continue;
-    if (s.speed > series[i - 1].speed && s.speed >= series[i + 1].speed) {
-      const last = peaks[peaks.length - 1];
-      if (!last || s.t - last.t > minGapMs) {
-        peaks.push(s);
-      } else if (s.speed > last.speed) {
-        peaks[peaks.length - 1] = s;
-      }
-    }
-  }
-  return peaks;
-}
-
-// Looks at the freestyle combo capture and measures how much speed
-// actually dipped between consecutive punches — the number the live
-// detector's "prominence" requirement is based on. Returns null if the
-// capture didn't contain at least two clear punches to compare.
-function analyzeCombo(samples, roughFloor) {
-  const leftSeries = speedSeriesFromRelSamples(samples.map((s) => ({ t: s.t, rel: s.left })));
-  const rightSeries = speedSeriesFromRelSamples(samples.map((s) => ({ t: s.t, rel: s.right })));
-  const minSpeed = roughFloor || 1.0;
-  const peaks = [...findLocalPeaks(leftSeries, 150, minSpeed), ...findLocalPeaks(rightSeries, 150, minSpeed)].sort((a, b) => a.t - b.t);
-  if (peaks.length < 2) return null;
-
-  const combined = [...leftSeries, ...rightSeries];
-  const depths = [];
-  for (let i = 1; i < peaks.length; i++) {
-    const a = peaks[i - 1];
-    const b = peaks[i];
-    const between = combined.filter((s) => s.t > a.t && s.t < b.t);
-    const minBetween = between.length ? Math.min(...between.map((s) => s.speed)) : Math.min(a.speed, b.speed) * 0.6;
-    depths.push(Math.min(a.speed, b.speed) - minBetween);
-  }
-  const valid = depths.filter((d) => d > 0);
-  return valid.length ? Math.min(...valid) : null;
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // Averages a pair of same-style direction vectors from opposite arms into
@@ -116,11 +83,7 @@ export function createCalibrationSession() {
   function recordFrame(stepKey, side, landmarks, t) {
     shoulderWidth = shoulderWidthOf(landmarks, shoulderWidth);
     if (!recordings[stepKey]) recordings[stepKey] = [];
-    if (side === "both") {
-      recordings[stepKey].push({ t, left: relWrist(landmarks, "left", shoulderWidth), right: relWrist(landmarks, "right", shoulderWidth) });
-    } else {
-      recordings[stepKey].push({ t, rel: relWrist(landmarks, side, shoulderWidth) });
-    }
+    recordings[stepKey].push({ t, rel: relWrist(landmarks, side, shoulderWidth) });
   }
 
   // Produces a calibration profile, or null if too little usable data
@@ -139,16 +102,10 @@ export function createCalibrationSession() {
       .filter((v) => v > 0);
     if (peakSpeeds.length === 0) return null;
 
-    // Real test with these multipliers at 0.45/0.75 overcounted by ~24%
-    // (84 thrown, 104 counted) — raised to be more conservative. People
-    // tend to throw calibration's sample punches a bit more carefully/
-    // slower than they do mid-round, so thresholds derived straight from
-    // calibration without margin ran looser than a real round needs.
     const weakestPeak = Math.min(...peakSpeeds);
-    const floorThreshold = weakestPeak * 0.55;
-
-    const comboDip = analyzeCombo(recordings["combo"] || [], floorThreshold);
-    const minProminence = comboDip != null ? comboDip * 1.1 : weakestPeak * 0.55;
+    const medianPeak = median(peakSpeeds);
+    const floorThreshold = weakestPeak * 0.5;
+    const minProminence = medianPeak * 0.45;
 
     return {
       floorThreshold,
