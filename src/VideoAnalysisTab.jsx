@@ -174,7 +174,7 @@ export default function VideoAnalysisTab({ userId, profileInfo, entries, lang, o
       });
       setAnalysis(reply.reply);
     } catch (err) {
-      setAnalysisError(c("analysisError", lang));
+      setAnalysisError(err.message || c("analysisError", lang));
     } finally {
       setAnalyzing(false);
     }

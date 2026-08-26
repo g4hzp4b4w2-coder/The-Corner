@@ -2202,7 +2202,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
   const [ownPlan, setOwnPlan] = useState({});
   const [aiPlan, setAiPlan] = useState(null);
   const [planLoading, setPlanLoading] = useState(false);
-  const [planError, setPlanError] = useState(false);
+  const [planError, setPlanError] = useState("");
   const [timeSlots, setTimeSlots] = useState([]);
 
   const plan = aiPlan || [];
@@ -2219,7 +2219,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
     setPlanReady(true);
     setCompleted(Array(7).fill(false));
     setPlanLoading(true);
-    setPlanError(false);
+    setPlanError("");
 
     let recentChat = [];
     try {
@@ -2246,7 +2246,9 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
       setAiPlan(res.plan);
     } catch (e) {
       setAiPlan(buildPlan(intensity, days, focus, lang));
-      setPlanError(true);
+      setPlanError(
+        e.message || (lang === "en" ? "Showing a general plan — AI plan unavailable right now." : "Genel bir plan gösteriliyor — AI planı şu an alınamadı.")
+      );
     } finally {
       setPlanLoading(false);
     }
@@ -2255,7 +2257,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
   const editAnswers = () => {
     setPlanReady(false);
     setAiPlan(null);
-    setPlanError(false);
+    setPlanError("");
     setCompleted(Array(7).fill(false));
   };
 
@@ -2334,11 +2336,7 @@ function CalendarTab({ onMarkDone, onUnmarkDone, lang, userId, profileInfo, entr
               </button>
             </div>
 
-            {planError && (
-              <p className="text-neutral-600 text-[11px] mb-2">
-                {lang === "en" ? "Showing a general plan — AI plan unavailable right now." : "Genel bir plan gösteriliyor — AI planı şu an alınamadı."}
-              </p>
-            )}
+            {planError && <p className="text-neutral-600 text-[11px] mb-2">{planError}</p>}
 
             {planLoading ? (
               <BoxingGloveLoader size={34} label={t(lang, "loadingLabel")} />

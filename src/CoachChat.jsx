@@ -68,7 +68,7 @@ export default function CoachChat({ userId, profileInfo, entries, lang }) {
       const savedAssistantMsg = await addChatMessage(userId, "assistant", reply.reply);
       setMessages((prev) => [...prev, savedAssistantMsg]);
     } catch (e) {
-      setError(c("error", lang));
+      setError(e.message || c("error", lang));
       setInput(text);
     } finally {
       setSending(false);

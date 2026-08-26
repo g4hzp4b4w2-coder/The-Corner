@@ -1,6 +1,7 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 import { buildProfileLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
+import { checkUsage, recordUsage, limitMessage } from "./_lib/usageLimits.js";
 
 // Video analysis sends many images plus a longer report-mode reply request,
 // which can take Claude a while to generate. Vercel kills the function at
@@ -143,6 +144,12 @@ export default async function handler(req, res) {
   const last = recentMessages[recentMessages.length - 1];
 
   const hasImages = Array.isArray(images) && images.length > 0;
+  const usageKind = hasImages ? "video" : "chat";
+  const usage = await checkUsage(user.id, usageKind);
+  if (!usage.allowed) {
+    res.status(429).json({ error: limitMessage(usageKind, usage.resetAt, lang) });
+    return;
+  }
 
   let lastContent = last.content;
   if (hasImages) {
@@ -245,6 +252,7 @@ export default async function handler(req, res) {
     }
 
     if (insight) await addKnowledge(insight, lang);
+    await recordUsage(user.id, usageKind);
 
     res.status(200).json({ reply });
   } catch (err) {

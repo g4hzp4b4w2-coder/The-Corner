@@ -1,6 +1,7 @@
 import { verifyUser } from "./_lib/verifyUser.js";
 import { buildProfileLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
+import { checkUsage, recordUsage, limitMessage } from "./_lib/usageLimits.js";
 
 // Generating a full weekly plan is a long, structured JSON reply — give it
 // more room than Vercel's default timeout before it gets killed mid-request.
@@ -152,6 +153,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  const usage = await checkUsage(user.id, "plan");
+  if (!usage.allowed) {
+    res.status(429).json({ error: limitMessage("plan", usage.resetAt, lang) });
+    return;
+  }
+
   try {
     const knowledge = await getRecentKnowledge(lang);
     const knowledgeLine = buildKnowledgeLine(knowledge, lang);
@@ -195,6 +202,7 @@ export default async function handler(req, res) {
       return;
     }
 
+    await recordUsage(user.id, "plan");
     res.status(200).json({ plan: parsed.plan });
   } catch (err) {
     res.status(500).json({ error: err.message || "Unknown error" });
