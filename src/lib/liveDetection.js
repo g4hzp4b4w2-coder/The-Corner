@@ -43,7 +43,7 @@ const CONFIRM_DELAY_MS = 150;
 // Minimum time between two counted punches on the same arm, independent
 // of prominence — a hard backstop against anything faster than humanly
 // real.
-const MIN_PEAK_SPACING_MS = 180;
+const MIN_PEAK_SPACING_MS = 240;
 // How far speed has to climb above the current valley floor before it
 // counts as the start of a new rise, rather than noise wobbling at the
 // bottom of an already-resolved dip.
