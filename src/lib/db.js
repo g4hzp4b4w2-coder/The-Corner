@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { resizeImage } from "./media";
 
 export async function getProfile(userId) {
   const { data, error } = await supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle();
@@ -124,6 +125,7 @@ export async function getCommunityPosts(userId) {
     text: p.text,
     stat: p.stat,
     topic: p.topic || "Genel",
+    imageUrl: p.image_url || null,
     likes: p.post_likes.length,
     comments: p.post_comments.length,
     liked: p.post_likes.some((l) => l.user_id === userId),
@@ -131,15 +133,29 @@ export async function getCommunityPosts(userId) {
   }));
 }
 
-export async function addCommunityPost(userId, { name, initials, text, stat, topic }) {
+export async function addCommunityPost(userId, { name, initials, text, stat, topic, imageUrl }) {
   const { error } = await supabase
     .from("community_posts")
-    .insert({ user_id: userId, name, initials, text, stat: stat || null, topic: topic || "Genel" });
+    .insert({ user_id: userId, name, initials, text, stat: stat || null, topic: topic || "Genel", image_url: imageUrl || null });
   if (error) throw error;
 }
 
 export async function deleteCommunityPost(postId, userId) {
   const { error } = await supabase.from("community_posts").delete().eq("id", postId).eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function uploadCommunityImage(userId, file) {
+  const blob = await resizeImage(file);
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabase.storage.from("community-media").upload(path, blob, { contentType: "image/jpeg" });
+  if (error) throw error;
+  const { data } = supabase.storage.from("community-media").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function reportPost(postId, reporterId, reason) {
+  const { error } = await supabase.from("post_reports").insert({ post_id: postId, reporter_id: reporterId, reason: reason || null });
   if (error) throw error;
 }
 
