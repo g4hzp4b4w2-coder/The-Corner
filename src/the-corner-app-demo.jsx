@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, Share2 } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -27,6 +27,7 @@ import CoachChat from "./CoachChat";
 import VideoAnalysisTab from "./VideoAnalysisTab";
 import LiveTrainingTab from "./LiveTrainingTab";
 import FrameFlipbook from "./FrameFlipbook";
+import FighterCardModal from "./FighterCard";
 
 const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
 const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
@@ -149,6 +150,7 @@ const translations = {
     en: "Your journal is stored privately, just for you. Community posts are visible to everyone with an account.",
   },
   focusPointLabel: { tr: "Odak noktası:", en: "Focus:" },
+  shareFighterCardLabel: { tr: "Dövüşçü kartını paylaş", en: "Share your fighter card" },
 
   // Onboarding
   onboardingTitle: { tr: "Seni tanıyalım", en: "Let's get to know you" },
@@ -1590,9 +1592,12 @@ function SkillBar({ skill, value }) {
 
 function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, onShareAchievement, loadError, lang }) {
   const [editing, setEditing] = useState(false);
+  const [showFighterCard, setShowFighterCard] = useState(false);
   const skillData = CATEGORY_LIST.map((skill) => ({ skill, value: profileInfo.ratings[skill] ?? 50 }));
   const fighter = getFighterProfile(profileInfo.style, profileInfo.school);
   const initials = computeInitials(profileInfo.displayName);
+  const topSkill = skillData.slice().sort((a, b) => b.value - a.value)[0];
+  const longestStreak = computeStreaks(entries).longest;
 
   if (editing) {
     return (
@@ -1639,6 +1644,14 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
           </p>
         </div>
       </div>
+
+      <button
+        onClick={() => setShowFighterCard(true)}
+        className="w-full flex items-center justify-center gap-2 bg-neutral-900 border border-red-900 hover:bg-neutral-800 text-red-400 font-semibold text-xs rounded-lg py-2.5 mb-4 transition-colors"
+      >
+        <Share2 size={14} />
+        {t(lang, "shareFighterCardLabel")}
+      </button>
 
       {(profileInfo.strengths.length > 0 || profileInfo.weaknesses.length > 0) && (
         <div className="flex gap-2 mb-4">
@@ -1731,6 +1744,17 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
           </button>
         </div>
       </div>
+
+      <FighterCardModal
+        open={showFighterCard}
+        onClose={() => setShowFighterCard(false)}
+        displayName={profileInfo.displayName}
+        styleLine={`${profileInfo.style || t(lang, "styleUnset")} · ${profileInfo.years || "—"}`}
+        totalSessions={entries.length}
+        longestStreak={longestStreak}
+        topSkillLabel={tc(topSkill.skill, lang)}
+        lang={lang}
+      />
     </div>
   );
 }
