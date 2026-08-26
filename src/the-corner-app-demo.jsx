@@ -1603,18 +1603,28 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
   return (
     <div className="px-5 pb-5">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-neutral-100 text-base font-medium">{t(lang, "profileTitle")}</p>
+        <p className="text-neutral-100 text-base font-bold tracking-tight">{t(lang, "profileTitle")}</p>
         <button onClick={() => setEditing(true)} className="text-red-500 text-xs">
           {t(lang, "editProfileLabel")}
         </button>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-full bg-red-950 border border-red-900 flex items-center justify-center text-red-500 text-sm font-medium">
+      <div className="relative flex items-center gap-3 mb-4 pt-1 pl-1 overflow-hidden">
+        <div
+          className="pointer-events-none absolute -top-2 -left-2 w-14 h-14"
+          style={{
+            background: "repeating-linear-gradient(135deg, #dc2626 0 2px, transparent 2px 9px)",
+            opacity: 0.25,
+            WebkitMaskImage: "linear-gradient(135deg, black, transparent 70%)",
+            maskImage: "linear-gradient(135deg, black, transparent 70%)",
+          }}
+          aria-hidden="true"
+        />
+        <div className="relative w-12 h-12 rounded-full bg-red-950 border border-red-900 flex items-center justify-center text-red-500 text-sm font-bold shrink-0">
           {initials}
         </div>
-        <div>
-          <p className="text-neutral-100 text-sm font-medium">{profileInfo.displayName}</p>
+        <div className="relative">
+          <p className="text-neutral-100 text-sm font-semibold">{profileInfo.displayName}</p>
           <p className="text-neutral-500 text-xs">
             {profileInfo.style || t(lang, "styleUnset")} · {profileInfo.years || "—"}
             {profileInfo.school && profileInfo.school !== "Karma / henüz yok" ? ` · ${profileInfo.school}` : ""}
@@ -1626,7 +1636,7 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
         <div className="flex gap-2 mb-4">
           {profileInfo.strengths.length > 0 && (
             <div className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-              <p className="text-neutral-500 text-[11px] mb-1">{t(lang, "strengthsLabel")}</p>
+              <p className="text-neutral-500 text-[11px] font-semibold mb-1">{t(lang, "strengthsLabel")}</p>
               <div className="flex gap-1 flex-wrap">
                 {profileInfo.strengths.map((s) => (
                   <span key={s} className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-900 px-1.5 py-0.5 rounded">
@@ -1638,7 +1648,7 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
           )}
           {profileInfo.weaknesses.length > 0 && (
             <div className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-              <p className="text-neutral-500 text-[11px] mb-1">{t(lang, "weaknessesLabel")}</p>
+              <p className="text-neutral-500 text-[11px] font-semibold mb-1">{t(lang, "weaknessesLabel")}</p>
               <div className="flex gap-1 flex-wrap">
                 {profileInfo.weaknesses.map((s) => (
                   <span key={s} className="text-[10px] bg-red-950 text-red-400 border border-red-900 px-1.5 py-0.5 rounded">
@@ -1652,14 +1662,22 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
       )}
 
       {fighter.reference && (
-        <div className="bg-neutral-900 border border-red-900 rounded-xl p-3 mb-4">
-          <p className="text-red-500 text-[11px] font-medium mb-1">{t(lang, "referenceFighterLabel")}</p>
-          <p className="text-neutral-100 text-sm font-medium mb-0.5">{fighter.reference}</p>
-          <p className="text-neutral-500 text-xs leading-relaxed">
+        <div
+          className="relative bg-neutral-900 border border-red-900 p-3 mb-4 overflow-hidden"
+          style={{ borderRadius: "4px 16px 16px 16px" }}
+        >
+          <div
+            className="absolute top-0 left-0 w-5 h-5 bg-red-600"
+            style={{ borderRadius: "4px 0 16px 0", clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+            aria-hidden="true"
+          />
+          <p className="text-red-500 text-[11px] font-semibold mb-1 pl-2">{t(lang, "referenceFighterLabel")}</p>
+          <p className="text-neutral-100 text-sm font-semibold mb-0.5 pl-2">{fighter.reference}</p>
+          <p className="text-neutral-500 text-xs leading-relaxed pl-2">
             {t(lang, "focusPointLabel")} {fighter.focus}
           </p>
           {fighter.quote && (
-            <p className="text-neutral-500 text-[11px] leading-relaxed mt-2 pt-2 border-t border-neutral-800 italic">
+            <p className="text-neutral-500 text-[11px] leading-relaxed mt-2 pt-2 border-t border-neutral-800 italic pl-2">
               {fighter.quote}
             </p>
           )}
