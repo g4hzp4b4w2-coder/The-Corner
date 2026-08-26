@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, Share2 } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, Share2, Image as ImageIcon, Flag } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -14,6 +14,8 @@ import {
   getCommunityPosts,
   addCommunityPost,
   deleteCommunityPost,
+  uploadCommunityImage,
+  reportPost as reportPostDb,
   getPostComments,
   addPostComment,
   toggleLike as toggleLikeDb,
@@ -129,7 +131,12 @@ const translations = {
 
   // Community
   composePlaceholder: { tr: "Topluluğa bir şey sor ya da paylaş...", en: "Ask or share something with the community..." },
-  emptyPostError: { tr: "Önce bir şey yaz", en: "Write something first" },
+  emptyPostError: { tr: "Önce bir şey yaz ya da bir fotoğraf ekle", en: "Write something or add a photo first" },
+  imageTypeError: { tr: "Sadece fotoğraf yükleyebilirsin", en: "You can only upload photos" },
+  imageUploadError: { tr: "Fotoğraf yüklenemedi, tekrar dene", en: "Couldn't upload the photo, try again" },
+  postError: { tr: "Gönderilemedi, tekrar dene", en: "Couldn't post, try again" },
+  reportLabel: { tr: "Bildir", en: "Report" },
+  reportedLabel: { tr: "Bildirildi", en: "Reported" },
 
   // Profile
   styleUnset: { tr: "Stil belirtilmedi", en: "Style not set" },
@@ -1154,23 +1161,49 @@ function NewEntryForm({ onSubmit, onCancel, lang }) {
   );
 }
 
-function ComposeBox({ onSubmit, lang }) {
+function ComposeBox({ onSubmit, userId, lang }) {
   const [text, setText] = useState("");
   const [topic, setTopic] = useState("Genel");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
+  const pickImage = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError(t(lang, "imageTypeError"));
+      return;
+    }
+    setError("");
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+  };
 
   const submit = async () => {
-    if (!text.trim()) {
+    if (!text.trim() && !imageFile) {
       setError(t(lang, "emptyPostError"));
       return;
     }
     setPosting(true);
     try {
-      await onSubmit({ text, topic });
+      let imageUrl = null;
+      if (imageFile) imageUrl = await uploadCommunityImage(userId, imageFile);
+      await onSubmit({ text, topic, imageUrl });
       setText("");
       setTopic("Genel");
       setError("");
+      removeImage();
+    } catch (e) {
+      setError(imageFile ? t(lang, "imageUploadError") : t(lang, "postError"));
     } finally {
       setPosting(false);
     }
@@ -1185,19 +1218,37 @@ function ComposeBox({ onSubmit, lang }) {
         rows={2}
         className="w-full bg-transparent text-neutral-200 text-sm placeholder-neutral-600 resize-none outline-none mb-2"
       />
-      <div className="flex gap-1.5 flex-wrap mb-2">
-        {POST_TOPICS.map((topicOption) => (
+      {imagePreview && (
+        <div className="relative inline-block mb-2">
+          <img src={imagePreview} alt="" className="max-h-40 rounded-lg" />
           <button
-            key={topicOption}
-            type="button"
-            onClick={() => setTopic(topicOption)}
-            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
-              topic === topicOption ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-950 border-neutral-800 text-neutral-500"
-            }`}
+            onClick={removeImage}
+            aria-label="Remove image"
+            className="absolute -top-2 -right-2 bg-neutral-950 border border-neutral-700 rounded-full p-1"
           >
-            {tp(topicOption, lang)}
+            <X size={12} className="text-neutral-300" />
           </button>
-        ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex gap-1.5 flex-wrap">
+          {POST_TOPICS.map((topicOption) => (
+            <button
+              key={topicOption}
+              type="button"
+              onClick={() => setTopic(topicOption)}
+              className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
+                topic === topicOption ? "bg-red-950 border-red-900 text-red-400" : "bg-neutral-950 border-neutral-800 text-neutral-500"
+              }`}
+            >
+              {tp(topicOption, lang)}
+            </button>
+          ))}
+        </div>
+        <label className="text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors shrink-0">
+          <ImageIcon size={16} />
+          <input type="file" accept="image/*" className="hidden" onChange={pickImage} />
+        </label>
       </div>
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
       <div className="flex justify-end">
@@ -1362,10 +1413,16 @@ function CommentThread({ postId, currentUserId, displayName, onCountChange, lang
   );
 }
 
-function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, displayName, lang }) {
+function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, currentUserId, displayName, lang }) {
   const [view, setView] = useState("feed");
   const [expandedId, setExpandedId] = useState(null);
   const [liveCounts, setLiveCounts] = useState({});
+  const [reportedIds, setReportedIds] = useState(() => new Set());
+
+  const report = (postId) => {
+    onReportPost(postId);
+    setReportedIds((prev) => new Set(prev).add(postId));
+  };
   const [sortMode, setSortMode] = useState("new");
   const [topicFilter, setTopicFilter] = useState("all");
 
@@ -1402,7 +1459,7 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
         <MatchNewsList lang={lang} />
       ) : (
         <>
-          <ComposeBox onSubmit={onPost} lang={lang} />
+          <ComposeBox onSubmit={onPost} userId={currentUserId} lang={lang} />
 
           {posts.length > 0 && (
             <div className="flex items-center justify-between mb-3 gap-2">
@@ -1480,7 +1537,7 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
                           {tp(p.topic, lang)}
                         </span>
                       )}
-                      {p.userId === currentUserId && (
+                      {p.userId === currentUserId ? (
                         <button
                           onClick={() => onDeletePost(p.id)}
                           aria-label="Delete post"
@@ -1488,8 +1545,27 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, currentUserId, disp
                         >
                           <Trash2 size={13} />
                         </button>
+                      ) : (
+                        <button
+                          onClick={() => report(p.id)}
+                          disabled={reportedIds.has(p.id)}
+                          aria-label="Report post"
+                          title={reportedIds.has(p.id) ? t(lang, "reportedLabel") : t(lang, "reportLabel")}
+                          className="ml-auto text-neutral-600 hover:text-red-500 disabled:opacity-40 transition-colors"
+                        >
+                          <Flag size={13} />
+                        </button>
                       )}
                     </div>
+
+                    {p.imageUrl && (
+                      <img
+                        src={p.imageUrl}
+                        alt=""
+                        className="w-full rounded-lg mb-2 object-cover"
+                        style={{ maxHeight: 420 }}
+                      />
+                    )}
 
                     {p.text && <p className="text-neutral-300 text-sm leading-relaxed mb-2">{p.text}</p>}
 
@@ -2744,12 +2820,20 @@ export default function TheCornerApp() {
     }
   };
 
-  const addPost = async ({ text, stat, topic }) => {
+  const addPost = async ({ text, stat, topic, imageUrl }) => {
     const name = profileInfo?.displayName || "—";
     const initials = computeInitials(name);
-    await addCommunityPost(session.user.id, { name, initials, text, stat, topic });
+    await addCommunityPost(session.user.id, { name, initials, text, stat, topic, imageUrl });
     const refreshed = await getCommunityPosts(session.user.id);
     setPosts(refreshed);
+  };
+
+  const submitReport = async (postId) => {
+    try {
+      await reportPostDb(postId, session.user.id);
+    } catch (e) {
+      // best-effort — a duplicate report just hits the unique constraint, ignore
+    }
   };
 
   const shareAchievement = async (badge) => {
@@ -2925,6 +3009,7 @@ export default function TheCornerApp() {
           onLike={toggleLike}
           onPost={addPost}
           onDeletePost={deletePost}
+          onReportPost={submitReport}
           currentUserId={session.user.id}
           displayName={profileInfo.displayName}
           lang={lang}
