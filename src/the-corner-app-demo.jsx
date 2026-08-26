@@ -177,6 +177,28 @@ const translations = {
   schoolMexican: { tr: "Meksika ekolü", en: "Mexican school" },
   schoolBritish: { tr: "Britanya ekolü", en: "British school" },
   schoolMixed: { tr: "Karma / henüz yok", en: "Mixed / none yet" },
+  physicalStatsTitle: { tr: "Fiziksel bilgiler (opsiyonel)", en: "Physical stats (optional)" },
+  physicalStatsHint: {
+    tr: "AI koçun sana daha isabetli mesafe/stil önerileri verebilmesi için kullanılır.",
+    en: "Used so your AI coach can give you more accurate distance/style advice.",
+  },
+  heightQuestion: { tr: "Boy (cm)", en: "Height (cm)" },
+  weightQuestion: { tr: "Kilo (kg)", en: "Weight (kg)" },
+  reachQuestion: { tr: "Kol uzunluğu (cm)", en: "Reach (cm)" },
+  weightClassQuestion: { tr: "Sıklet", en: "Weight class" },
+  weightClassPlaceholder: { tr: "Seç (opsiyonel)", en: "Select (optional)" },
+  weightClassFly: { tr: "Sineksiklet", en: "Flyweight" },
+  weightClassBantam: { tr: "Horozsiklet", en: "Bantamweight" },
+  weightClassFeather: { tr: "Tüysiklet", en: "Featherweight" },
+  weightClassLight: { tr: "Hafifsiklet", en: "Lightweight" },
+  weightClassWelter: { tr: "Yarıortasiklet", en: "Welterweight" },
+  weightClassMiddle: { tr: "Ortasiklet", en: "Middleweight" },
+  weightClassLightHeavy: { tr: "Ağıryarısiklet", en: "Light heavyweight" },
+  weightClassHeavy: { tr: "Ağırsiklet", en: "Heavyweight" },
+  heightLabel: { tr: "BOY", en: "HEIGHT" },
+  weightLabel: { tr: "KİLO", en: "WEIGHT" },
+  reachLabel: { tr: "KOL UZUNLUĞU", en: "REACH" },
+  weightClassLabel: { tr: "SİKLET", en: "WEIGHT CLASS" },
   strengthsQuestion: { tr: "En güçlü olduğun alanlar", en: "Your strongest areas" },
   weaknessesQuestion: { tr: "Geliştirmek istediğin alanlar", en: "Areas you want to improve" },
   selfRateQuestion: { tr: "Kendini 0-100 arası değerlendir", en: "Rate yourself 0-100" },
@@ -297,6 +319,20 @@ const categoryTranslations = {
 };
 function tc(cat, lang) {
   return categoryTranslations[cat] ? categoryTranslations[cat][lang] || cat : cat;
+}
+
+const weightClassTranslations = {
+  Sineksiklet: { tr: "Sineksiklet", en: "Flyweight" },
+  Horozsiklet: { tr: "Horozsiklet", en: "Bantamweight" },
+  Tüysiklet: { tr: "Tüysiklet", en: "Featherweight" },
+  Hafifsiklet: { tr: "Hafifsiklet", en: "Lightweight" },
+  Yarıortasiklet: { tr: "Yarıortasiklet", en: "Welterweight" },
+  Ortasiklet: { tr: "Ortasiklet", en: "Middleweight" },
+  Ağıryarısiklet: { tr: "Ağıryarısiklet", en: "Light heavyweight" },
+  Ağırsiklet: { tr: "Ağırsiklet", en: "Heavyweight" },
+};
+function tw(weightClass, lang) {
+  return weightClassTranslations[weightClass] ? weightClassTranslations[weightClass][lang] || weightClass : weightClass;
 }
 
 const postTopicTranslations = {
@@ -1645,6 +1681,22 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
         </div>
       </div>
 
+      {(profileInfo.heightCm || profileInfo.weightKg || profileInfo.reachCm || profileInfo.weightClass) && (
+        <div className="grid grid-cols-4 bg-neutral-900 border border-neutral-800 rounded-lg mb-4 overflow-hidden">
+          {[
+            [t(lang, "heightLabel"), profileInfo.heightCm ? `${profileInfo.heightCm}` : "—"],
+            [t(lang, "weightLabel"), profileInfo.weightKg ? `${profileInfo.weightKg}` : "—"],
+            [t(lang, "reachLabel"), profileInfo.reachCm ? `${profileInfo.reachCm}` : "—"],
+            [t(lang, "weightClassLabel"), profileInfo.weightClass ? tw(profileInfo.weightClass, lang) : "—"],
+          ].map(([label, value], i) => (
+            <div key={label} className={`px-2 py-2 text-center ${i > 0 ? "border-l border-neutral-800" : ""}`}>
+              <p className="text-neutral-600 text-[9px] tracking-wide mb-0.5">{label}</p>
+              <p className="text-neutral-100 text-xs font-bold">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button
         onClick={() => setShowFighterCard(true)}
         className="w-full flex items-center justify-center gap-2 bg-neutral-900 border border-red-900 hover:bg-neutral-800 text-red-400 font-semibold text-xs rounded-lg py-2.5 mb-4 transition-colors"
@@ -1753,6 +1805,10 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
         totalSessions={entries.length}
         longestStreak={longestStreak}
         topSkillLabel={tc(topSkill.skill, lang)}
+        heightCm={profileInfo.heightCm}
+        weightKg={profileInfo.weightKg}
+        reachCm={profileInfo.reachCm}
+        weightClassLabel={profileInfo.weightClass ? tw(profileInfo.weightClass, lang) : ""}
         lang={lang}
       />
     </div>
@@ -2347,6 +2403,10 @@ function OnboardingForm({ onComplete, lang, initialData, onCancel }) {
   const [years, setYears] = useState(initialData?.years || "");
   const [style, setStyle] = useState(initialData?.style || "");
   const [school, setSchool] = useState(initialData?.school || "");
+  const [heightCm, setHeightCm] = useState(initialData?.heightCm || "");
+  const [weightKg, setWeightKg] = useState(initialData?.weightKg || "");
+  const [weightClass, setWeightClass] = useState(initialData?.weightClass || "");
+  const [reachCm, setReachCm] = useState(initialData?.reachCm || "");
   const [strengths, setStrengths] = useState(initialData?.strengths || []);
   const [weaknesses, setWeaknesses] = useState(initialData?.weaknesses || []);
   const [ratings, setRatings] = useState(initialData?.ratings || { Güç: 50, Defans: 50, Teknik: 50, "Fight IQ": 50, Hız: 50 });
@@ -2369,7 +2429,19 @@ function OnboardingForm({ onComplete, lang, initialData, onCancel }) {
     setError("");
     setSaving(true);
     try {
-      await onComplete({ displayName: displayName.trim(), years, style, school, strengths, weaknesses, ratings });
+      await onComplete({
+        displayName: displayName.trim(),
+        years,
+        style,
+        school,
+        strengths,
+        weaknesses,
+        ratings,
+        heightCm: heightCm ? Number(heightCm) : null,
+        weightKg: weightKg ? Number(weightKg) : null,
+        weightClass,
+        reachCm: reachCm ? Number(reachCm) : null,
+      });
     } finally {
       setSaving(false);
     }
@@ -2430,6 +2502,59 @@ function OnboardingForm({ onComplete, lang, initialData, onCancel }) {
         <option value="Britanya ekolü">{t(lang, "schoolBritish")}</option>
         <option value="Karma / henüz yok">{t(lang, "schoolMixed")}</option>
       </select>
+
+      <p className="text-neutral-300 text-xs font-semibold mb-1">{t(lang, "physicalStatsTitle")}</p>
+      <p className="text-neutral-600 text-[11px] mb-2">{t(lang, "physicalStatsHint")}</p>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <label className="text-neutral-500 text-xs block mb-1">{t(lang, "heightQuestion")}</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={heightCm}
+            onChange={(e) => setHeightCm(e.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+          />
+        </div>
+        <div>
+          <label className="text-neutral-500 text-xs block mb-1">{t(lang, "weightQuestion")}</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+          />
+        </div>
+        <div>
+          <label className="text-neutral-500 text-xs block mb-1">{t(lang, "reachQuestion")}</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={reachCm}
+            onChange={(e) => setReachCm(e.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+          />
+        </div>
+        <div>
+          <label className="text-neutral-500 text-xs block mb-1">{t(lang, "weightClassQuestion")}</label>
+          <select
+            value={weightClass}
+            onChange={(e) => setWeightClass(e.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm rounded-lg px-3 py-2"
+          >
+            <option value="">{t(lang, "weightClassPlaceholder")}</option>
+            <option value="Sineksiklet">{t(lang, "weightClassFly")}</option>
+            <option value="Horozsiklet">{t(lang, "weightClassBantam")}</option>
+            <option value="Tüysiklet">{t(lang, "weightClassFeather")}</option>
+            <option value="Hafifsiklet">{t(lang, "weightClassLight")}</option>
+            <option value="Yarıortasiklet">{t(lang, "weightClassWelter")}</option>
+            <option value="Ortasiklet">{t(lang, "weightClassMiddle")}</option>
+            <option value="Ağıryarısiklet">{t(lang, "weightClassLightHeavy")}</option>
+            <option value="Ağırsiklet">{t(lang, "weightClassHeavy")}</option>
+          </select>
+        </div>
+      </div>
 
       <p className="text-neutral-500 text-xs mb-1.5">{t(lang, "strengthsQuestion")}</p>
       <div className="flex gap-1.5 flex-wrap mb-4">

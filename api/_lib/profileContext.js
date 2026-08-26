@@ -6,6 +6,31 @@ export function buildRatingsLine(ratings, lang) {
   return lang === "en" ? `Self-rated skills (0-100): ${entries}` : `Kendi değerlendirdiği yetenek puanları (0-100): ${entries}`;
 }
 
+export function buildPhysicalStatsLine(profile, lang) {
+  const parts = [
+    profile?.heightCm && (lang === "en" ? `Height: ${profile.heightCm}cm` : `Boy: ${profile.heightCm}cm`),
+    profile?.weightKg && (lang === "en" ? `Weight: ${profile.weightKg}kg` : `Kilo: ${profile.weightKg}kg`),
+    profile?.reachCm && (lang === "en" ? `Reach: ${profile.reachCm}cm` : `Kol uzunluğu: ${profile.reachCm}cm`),
+    profile?.weightClass && (lang === "en" ? `Weight class: ${profile.weightClass}` : `Sıklet: ${profile.weightClass}`),
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+export function buildProfileLine(profile, lang) {
+  return [
+    profile?.displayName && (lang === "en" ? `Name: ${profile.displayName}` : `İsim: ${profile.displayName}`),
+    profile?.years && (lang === "en" ? `Experience: ${profile.years}` : `Deneyim: ${profile.years}`),
+    profile?.style && (lang === "en" ? `Style: ${profile.style}` : `Stil: ${profile.style}`),
+    profile?.school && (lang === "en" ? `School: ${profile.school}` : `Ekol: ${profile.school}`),
+    buildPhysicalStatsLine(profile, lang),
+    profile?.strengths?.length && (lang === "en" ? `Strengths: ${profile.strengths.join(", ")}` : `Güçlü yanlar: ${profile.strengths.join(", ")}`),
+    profile?.weaknesses?.length && (lang === "en" ? `Areas to improve: ${profile.weaknesses.join(", ")}` : `Geliştirmesi gerekenler: ${profile.weaknesses.join(", ")}`),
+    buildRatingsLine(profile?.ratings, lang),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export const ADDRESS_NOTE = {
   tr: "Sen koçsun, kullanıcı senin eğittiğin boksör/sporcu — rolleri karıştırma. Kullanıcı sana 'koç' diye hitap etse bile bu senin rolüne yapılan bir hitaptır; sen kullanıcıyı asla 'koç' diye çağırma. Profilinde ismi verilmişse kullanıcıya adıyla hitap et, verilmemişse doğrudan/nötr bir dille konuş.",
   en: "You are the coach; the user is the boxer/athlete you're training — don't mix up the roles. Even if the user addresses you as 'coach', that's them addressing your role; never call the user 'coach' back. If their name is given in the profile, address them by name, otherwise speak to them directly/neutrally.",
