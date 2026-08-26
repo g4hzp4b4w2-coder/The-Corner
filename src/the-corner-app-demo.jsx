@@ -1542,11 +1542,19 @@ function BadgeGrid({ entries, lang, onShare }) {
         return (
           <div
             key={b.id}
-            className={`rounded-lg px-3 py-2.5 flex flex-col gap-1 border ${
+            className={`relative overflow-hidden px-3 py-2.5 flex flex-col gap-1 border ${
               earned ? "bg-red-950 border-red-900" : "bg-neutral-900 border-neutral-800"
             }`}
+            style={{ borderRadius: earned ? "4px 12px 12px 12px" : "8px" }}
           >
-            <div className="flex items-center gap-2">
+            {earned && (
+              <div
+                className="absolute top-0 left-0 w-4 h-4 bg-red-600"
+                style={{ borderRadius: "4px 0 12px 0", clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+                aria-hidden="true"
+              />
+            )}
+            <div className={`flex items-center gap-2 ${earned ? "pl-1.5" : ""}`}>
               <Icon size={16} className={earned ? "text-red-500" : "text-neutral-600"} />
               <span className={`text-xs ${earned ? "text-red-400" : "text-neutral-600"}`}>{b.label[lang] || b.label.tr}</span>
             </div>
