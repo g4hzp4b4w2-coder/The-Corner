@@ -1,5 +1,5 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
+import { buildProfileLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, addKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 // Video analysis sends many images plus a longer report-mode reply request,
@@ -66,17 +66,7 @@ const YOU_PERSON_NOTE = {
 };
 
 function buildSystemPrompt(profile, entries, lang, knowledgeLine) {
-  const profileLine = [
-    profile?.displayName && `Name: ${profile.displayName}`,
-    profile?.years && `Deneyim: ${profile.years}`,
-    profile?.style && `Stil: ${profile.style}`,
-    profile?.school && `Ekol: ${profile.school}`,
-    profile?.strengths?.length && `Güçlü yanlar: ${profile.strengths.join(", ")}`,
-    profile?.weaknesses?.length && `Geliştirmesi gerekenler: ${profile.weaknesses.join(", ")}`,
-    buildRatingsLine(profile?.ratings, lang),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const profileLine = buildProfileLine(profile, lang);
 
   const entriesLines = (entries || [])
     .slice(0, 5)

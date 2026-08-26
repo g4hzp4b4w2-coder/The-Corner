@@ -7,11 +7,14 @@ const COPY = {
   generating: { tr: "Kart hazırlanıyor…", en: "Preparing your card…" },
   error: { tr: "Kart oluşturulamadı, tekrar dene.", en: "Couldn't create the card, try again." },
   share: { tr: "Paylaş", en: "Share" },
-  totalSessions: { tr: "TOPLAM SEANS", en: "TOTAL SESSIONS" },
+  totalSessions: { tr: "SEANS", en: "SESSIONS" },
   longestStreak: { tr: "EN UZUN SERİ", en: "LONGEST STREAK" },
   topSkill: { tr: "GÜÇLÜ YÖN", en: "TOP SKILL" },
+  height: { tr: "BOY", en: "HEIGHT" },
+  weight: { tr: "KİLO", en: "WEIGHT" },
+  reach: { tr: "KOL UZUNLUĞU", en: "REACH" },
+  weightClass: { tr: "SİKLET", en: "WEIGHT CLASS" },
   shareText: { tr: "The Corner'da antrenman kaydımı tutuyorum 🥊", en: "Tracking my training on The Corner 🥊" },
-  footer: { tr: "PROFESYONEL GİBİ ANTRENMAN YAP — THE CORNER", en: "TRAIN LIKE A PRO — THE CORNER" },
 };
 
 function c(key, lang) {
@@ -19,12 +22,26 @@ function c(key, lang) {
 }
 
 const CARD_W = 1080;
-const CARD_H = 1080;
+const CARD_H = 1060;
 
 function initialsOf(name) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return parts.slice(0, 2).map((p) => p[0].toUpperCase()).join("") || "?";
+}
+
+function upper(text, lang) {
+  return (text || "").toLocaleUpperCase(lang === "en" ? "en-US" : "tr-TR");
+}
+
+function fitFontSize(ctx, text, weight, maxWidth, startPx, minPx) {
+  let size = startPx;
+  while (size > minPx) {
+    ctx.font = `${weight} ${size}px "Space Grotesk"`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+    size -= 2;
+  }
+  return size;
 }
 
 function roundedRectPath(ctx, x, y, w, h, r) {
@@ -52,7 +69,7 @@ function loadImage(src) {
 }
 
 function drawStatTile(ctx, x, y, w, h, label, value) {
-  roundedRectPath(ctx, x, y, w, h, [8, 28, 28, 28]);
+  roundedRectPath(ctx, x, y, w, h, [8, 24, 24, 24]);
   ctx.fillStyle = "#171717";
   ctx.fill();
   ctx.lineWidth = 2;
@@ -60,30 +77,43 @@ function drawStatTile(ctx, x, y, w, h, label, value) {
   ctx.stroke();
 
   ctx.save();
-  roundedRectPath(ctx, x, y, w, h, [8, 28, 28, 28]);
+  roundedRectPath(ctx, x, y, w, h, [8, 24, 24, 24]);
   ctx.clip();
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(x + 34, y);
-  ctx.lineTo(x, y + 34);
+  ctx.lineTo(x + 30, y);
+  ctx.lineTo(x, y + 30);
   ctx.closePath();
   ctx.fillStyle = "#dc2626";
   ctx.fill();
   ctx.restore();
 
   ctx.fillStyle = "#737373";
-  ctx.font = '600 18px "Space Grotesk"';
+  ctx.font = '600 16px "Space Grotesk"';
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
-  ctx.fillText(label, x + 20, y + 46, w - 40);
+  ctx.fillText(label, x + 18, y + 20, w - 36);
 
   ctx.fillStyle = "#f5f5f5";
-  ctx.font = '700 38px "Space Grotesk"';
+  ctx.font = '700 34px "Space Grotesk"';
   ctx.textBaseline = "bottom";
-  ctx.fillText(value, x + 20, y + h - 22, w - 40);
+  ctx.fillText(value, x + 18, y + h - 18, w - 36);
 }
 
-async function drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, lang }) {
+function drawTapeColumn(ctx, cx, colW, label, value) {
+  ctx.fillStyle = "#737373";
+  ctx.font = '600 16px "Space Grotesk"';
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "center";
+  ctx.fillText(label, cx, 0, colW - 24);
+
+  const size = fitFontSize(ctx, value, 700, colW - 24, 38, 22);
+  ctx.font = `700 ${size}px "Space Grotesk"`;
+  ctx.fillStyle = "#f5f5f5";
+  ctx.fillText(value, cx, 50, colW - 24);
+}
+
+async function drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang }) {
   const canvas = document.createElement("canvas");
   canvas.width = CARD_W;
   canvas.height = CARD_H;
@@ -91,8 +121,8 @@ async function drawCard({ displayName, styleLine, totalSessions, longestStreak, 
 
   try {
     await Promise.all([
-      document.fonts.load('700 56px "Space Grotesk"'),
-      document.fonts.load('600 28px "Space Grotesk"'),
+      document.fonts.load('700 60px "Space Grotesk"'),
+      document.fonts.load('600 24px "Space Grotesk"'),
       document.fonts.load('500 20px "Space Grotesk"'),
     ]);
     await document.fonts.ready;
@@ -106,8 +136,8 @@ async function drawCard({ displayName, styleLine, totalSessions, longestStreak, 
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(360, 0);
-  ctx.lineTo(0, 360);
+  ctx.lineTo(320, 0);
+  ctx.lineTo(0, 320);
   ctx.closePath();
   ctx.clip();
   ctx.strokeStyle = "rgba(220,38,38,0.35)";
@@ -120,7 +150,6 @@ async function drawCard({ displayName, styleLine, totalSessions, longestStreak, 
   }
   ctx.restore();
 
-  const pad = 72;
   let logo = null;
   try {
     logo = await loadImage("/logo-mark.png");
@@ -128,79 +157,113 @@ async function drawCard({ displayName, styleLine, totalSessions, longestStreak, 
     // no logo, continue without it
   }
 
+  const pad = 72;
+  const contentW = CARD_W - pad * 2;
   let y = pad;
-  const headerH = 64;
+
+  const headerH = 44;
   let logoW = 0;
   if (logo) {
     logoW = (logo.width / logo.height) * headerH;
     ctx.drawImage(logo, pad, y, logoW, headerH);
   }
   ctx.fillStyle = "#f5f5f5";
-  ctx.font = '700 34px "Space Grotesk"';
-  ctx.textBaseline = "top";
+  ctx.font = '700 26px "Space Grotesk"';
+  ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.fillText("THE CORNER", pad + logoW + (logoW ? 20 : 0), y + 6);
-  ctx.fillStyle = "#525252";
-  ctx.font = '500 20px "Space Grotesk"';
-  ctx.fillText("FIGHTER'S HUB", pad + logoW + (logoW ? 20 : 0), y + 46);
-  y += headerH + 64;
+  ctx.fillText("THE CORNER", pad + logoW + (logoW ? 16 : 0), y + headerH / 2);
+  y += headerH + 56;
 
-  const avatarR = 96;
-  const avatarCx = pad + avatarR;
+  const avatarR = 84;
+  const avatarCx = CARD_W / 2;
   const avatarCy = y + avatarR;
   ctx.beginPath();
   ctx.arc(avatarCx, avatarCy, avatarR, 0, Math.PI * 2);
   ctx.fillStyle = "#450a0a";
   ctx.fill();
   ctx.lineWidth = 4;
-  ctx.strokeStyle = "#7f1d1d";
+  ctx.strokeStyle = "#dc2626";
   ctx.stroke();
   ctx.fillStyle = "#ef4444";
-  ctx.font = '700 60px "Space Grotesk"';
+  ctx.font = '700 56px "Space Grotesk"';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(initialsOf(displayName), avatarCx, avatarCy + 6);
+  y = avatarCy + avatarR + 36;
 
-  const nameX = avatarCx + avatarR + 40;
-  const nameMaxW = CARD_W - nameX - pad;
-  ctx.textAlign = "left";
+  const nameText = upper(displayName, lang);
+  const nameSize = fitFontSize(ctx, nameText, 700, contentW, 60, 34);
+  ctx.font = `700 ${nameSize}px "Space Grotesk"`;
   ctx.fillStyle = "#f5f5f5";
-  ctx.font = '700 50px "Space Grotesk"';
-  ctx.fillText(displayName, nameX, avatarCy - 22, nameMaxW);
-  ctx.fillStyle = "#737373";
-  ctx.font = '500 26px "Space Grotesk"';
-  ctx.fillText(styleLine, nameX, avatarCy + 30, nameMaxW);
-  y = avatarCy + avatarR + 64;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(nameText, CARD_W / 2, y + nameSize * 0.75, contentW);
+  y += nameSize * 0.75 + 14;
+
+  const subtitleText = upper(styleLine, lang);
+  const subtitleSize = fitFontSize(ctx, subtitleText, 600, contentW, 22, 14);
+  ctx.font = `600 ${subtitleSize}px "Space Grotesk"`;
+  ctx.fillStyle = "#dc2626";
+  ctx.fillText(subtitleText, CARD_W / 2, y + subtitleSize, contentW);
+  y += subtitleSize + 36;
+
+  ctx.strokeStyle = "#262626";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pad, y);
+  ctx.lineTo(CARD_W - pad, y);
+  ctx.stroke();
+  y += 36;
+
+  const tapeRowH = 74;
+  const cols = [
+    [c("height", lang), heightCm ? `${heightCm} cm` : "—"],
+    [c("weight", lang), weightKg ? `${weightKg} kg` : "—"],
+    [c("reach", lang), reachCm ? `${reachCm} cm` : "—"],
+    [c("weightClass", lang), weightClassLabel || "—"],
+  ];
+  const colW = contentW / 4;
+  ctx.save();
+  ctx.translate(0, y);
+  cols.forEach(([label, value], i) => {
+    const colCx = pad + colW * i + colW / 2;
+    drawTapeColumn(ctx, colCx, colW, label, value);
+    if (i > 0) {
+      ctx.strokeStyle = "#262626";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pad + colW * i, -6);
+      ctx.lineTo(pad + colW * i, tapeRowH - 6);
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
+  y += tapeRowH + 30;
+
+  ctx.strokeStyle = "#262626";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pad, y);
+  ctx.lineTo(CARD_W - pad, y);
+  ctx.stroke();
+  y += 36;
 
   const tileGap = 24;
-  const tileW = (CARD_W - pad * 2 - tileGap * 2) / 3;
-  const tileH = 240;
+  const tileW = (contentW - tileGap * 2) / 3;
+  const tileH = 190;
   drawStatTile(ctx, pad, y, tileW, tileH, c("totalSessions", lang), String(totalSessions));
   drawStatTile(ctx, pad + tileW + tileGap, y, tileW, tileH, c("longestStreak", lang), String(longestStreak));
   drawStatTile(ctx, pad + (tileW + tileGap) * 2, y, tileW, tileH, c("topSkill", lang), topSkillLabel);
-  y += tileH;
+  y += tileH + 44;
 
-  const footerH = 100;
-  const footerY = CARD_H - footerH;
-  if (logo && footerY - y > 60) {
-    const bandH = footerY - y;
-    const wmH = Math.min(bandH * 1.5, 460);
-    const wmW = (logo.width / logo.height) * wmH;
-    ctx.save();
-    ctx.globalAlpha = 0.05;
-    ctx.translate(CARD_W / 2, y + bandH / 2);
-    ctx.rotate((-6 * Math.PI) / 180);
-    ctx.drawImage(logo, -wmW / 2, -wmH / 2, wmW, wmH);
-    ctx.restore();
-  }
-
+  const footerH = CARD_H - y;
   ctx.fillStyle = "#dc2626";
-  ctx.fillRect(0, footerY, CARD_W, footerH);
+  ctx.fillRect(0, y, CARD_W, footerH);
   ctx.fillStyle = "#0a0a0a";
-  ctx.font = '700 28px "Space Grotesk"';
+  ctx.font = '700 30px "Space Grotesk"';
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
-  ctx.fillText(c("footer", lang), CARD_W / 2, footerY + footerH / 2);
+  ctx.fillText("THE CORNER", CARD_W / 2, y + footerH / 2);
 
   return canvas;
 }
@@ -216,7 +279,20 @@ function downloadBlob(blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function FighterCardModal({ open, onClose, displayName, styleLine, totalSessions, longestStreak, topSkillLabel, lang }) {
+export default function FighterCardModal({
+  open,
+  onClose,
+  displayName,
+  styleLine,
+  totalSessions,
+  longestStreak,
+  topSkillLabel,
+  heightCm,
+  weightKg,
+  reachCm,
+  weightClassLabel,
+  lang,
+}) {
   const [status, setStatus] = useState("loading");
   const [previewUrl, setPreviewUrl] = useState(null);
   const blobRef = useRef(null);
@@ -226,7 +302,7 @@ export default function FighterCardModal({ open, onClose, displayName, styleLine
     let cancelled = false;
     setStatus("loading");
     blobRef.current = null;
-    drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, lang })
+    drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang })
       .then(
         (canvas) =>
           new Promise((resolve) => {
@@ -249,7 +325,7 @@ export default function FighterCardModal({ open, onClose, displayName, styleLine
     return () => {
       cancelled = true;
     };
-  }, [open, displayName, styleLine, totalSessions, longestStreak, topSkillLabel, lang]);
+  }, [open, displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang]);
 
   useEffect(() => {
     return () => {

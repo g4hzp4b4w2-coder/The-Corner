@@ -1,5 +1,5 @@
 import { verifyUser } from "./_lib/verifyUser.js";
-import { buildRatingsLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
+import { buildProfileLine, FIGHT_IQ_NOTE, EXPERTISE_NOTE, ADDRESS_NOTE } from "./_lib/profileContext.js";
 import { getRecentKnowledge, buildKnowledgeLine } from "./_lib/coachKnowledge.js";
 
 // Generating a full weekly plan is a long, structured JSON reply — give it
@@ -17,17 +17,7 @@ const INTENSITY_LABEL = {
 };
 
 function buildSystemPrompt({ profile, entries, recentChat, intensity, days, level, focus, timeSlots, categoryBalance, lang, knowledgeLine }) {
-  const profileLine = [
-    profile?.displayName && `İsim: ${profile.displayName}`,
-    profile?.years && `Deneyim: ${profile.years}`,
-    profile?.style && `Stil: ${profile.style}`,
-    profile?.school && `Ekol: ${profile.school}`,
-    profile?.strengths?.length && `Güçlü yanlar: ${profile.strengths.join(", ")}`,
-    profile?.weaknesses?.length && `Geliştirmesi gerekenler: ${profile.weaknesses.join(", ")}`,
-    buildRatingsLine(profile?.ratings, lang),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const profileLine = buildProfileLine(profile, lang);
 
   const entriesLines = (entries || [])
     .slice(0, 5)

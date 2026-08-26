@@ -13,6 +13,10 @@ export async function getProfile(userId) {
     weaknesses: data.weaknesses || [],
     ratings: data.ratings || {},
     lang: data.lang || "tr",
+    heightCm: data.height_cm ?? null,
+    weightKg: data.weight_kg ?? null,
+    weightClass: data.weight_class ?? "",
+    reachCm: data.reach_cm ?? null,
   };
 }
 
@@ -26,6 +30,10 @@ export async function upsertProfile(userId, profile) {
     strengths: profile.strengths || [],
     weaknesses: profile.weaknesses || [],
     ratings: profile.ratings || {},
+    height_cm: profile.heightCm || null,
+    weight_kg: profile.weightKg || null,
+    weight_class: profile.weightClass || "",
+    reach_cm: profile.reachCm || null,
   };
   if (profile.lang) row.lang = profile.lang;
   const { error } = await supabase.from("profiles").upsert(row);
