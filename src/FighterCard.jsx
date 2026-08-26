@@ -14,6 +14,7 @@ const COPY = {
   weight: { tr: "KİLO", en: "WEIGHT" },
   reach: { tr: "KOL UZUNLUĞU", en: "REACH" },
   weightClass: { tr: "SİKLET", en: "WEIGHT CLASS" },
+  skillDistribution: { tr: "YETENEK DAĞILIMI", en: "SKILL DISTRIBUTION" },
   shareText: { tr: "The Corner'da antrenman kaydımı tutuyorum 🥊", en: "Tracking my training on The Corner 🥊" },
 };
 
@@ -22,7 +23,7 @@ function c(key, lang) {
 }
 
 const CARD_W = 1080;
-const CARD_H = 1060;
+const CARD_H = 1500;
 
 function initialsOf(name) {
   if (!name) return "?";
@@ -113,7 +114,75 @@ function drawTapeColumn(ctx, cx, colW, label, value) {
   ctx.fillText(value, cx, 50, colW - 24);
 }
 
-async function drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang }) {
+function drawRadar(ctx, cx, cy, maxR, skills) {
+  const n = skills.length;
+  const angleFor = (i) => -Math.PI / 2 + i * ((Math.PI * 2) / n);
+
+  ctx.strokeStyle = "#262626";
+  ctx.lineWidth = 2;
+  [0.25, 0.5, 0.75, 1].forEach((frac) => {
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = angleFor(i % n);
+      const r = maxR * frac;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+
+  for (let i = 0; i < n; i++) {
+    const a = angleFor(i);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const idx = i % n;
+    const a = angleFor(idx);
+    const r = (skills[idx].value / 100) * maxR;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "rgba(220,38,38,0.35)";
+  ctx.fill();
+  ctx.strokeStyle = "#dc2626";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = "#a3a3a3";
+  ctx.font = '600 20px "Space Grotesk"';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < n; i++) {
+    const a = angleFor(i);
+    const lx = cx + Math.cos(a) * (maxR + 38);
+    const ly = cy + Math.sin(a) * (maxR + 38);
+    ctx.fillText(skills[i].label, lx, ly);
+  }
+}
+
+async function drawCard({
+  displayName,
+  styleLine,
+  totalSessions,
+  longestStreak,
+  topSkillLabel,
+  heightCm,
+  weightKg,
+  reachCm,
+  weightClassLabel,
+  skills,
+  lang,
+}) {
   const canvas = document.createElement("canvas");
   canvas.width = CARD_W;
   canvas.height = CARD_H;
@@ -248,6 +317,27 @@ async function drawCard({ displayName, styleLine, totalSessions, longestStreak, 
   ctx.stroke();
   y += 36;
 
+  if (skills?.length) {
+    ctx.fillStyle = "#737373";
+    ctx.font = '600 20px "Space Grotesk"';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(c("skillDistribution", lang), CARD_W / 2, y);
+    y += 24 + 50;
+
+    const radarR = 130;
+    drawRadar(ctx, CARD_W / 2, y + radarR + 20, radarR, skills);
+    y += radarR * 2 + 20 + 60;
+
+    ctx.strokeStyle = "#262626";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(CARD_W - pad, y);
+    ctx.stroke();
+    y += 36;
+  }
+
   const tileGap = 24;
   const tileW = (contentW - tileGap * 2) / 3;
   const tileH = 190;
@@ -291,6 +381,7 @@ export default function FighterCardModal({
   weightKg,
   reachCm,
   weightClassLabel,
+  skills,
   lang,
 }) {
   const [status, setStatus] = useState("loading");
@@ -302,7 +393,7 @@ export default function FighterCardModal({
     let cancelled = false;
     setStatus("loading");
     blobRef.current = null;
-    drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang })
+    drawCard({ displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, skills, lang })
       .then(
         (canvas) =>
           new Promise((resolve) => {
@@ -325,7 +416,7 @@ export default function FighterCardModal({
     return () => {
       cancelled = true;
     };
-  }, [open, displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, lang]);
+  }, [open, displayName, styleLine, totalSessions, longestStreak, topSkillLabel, heightCm, weightKg, reachCm, weightClassLabel, JSON.stringify(skills), lang]);
 
   useEffect(() => {
     return () => {

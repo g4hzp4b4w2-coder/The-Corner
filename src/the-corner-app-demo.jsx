@@ -1809,6 +1809,7 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
         weightKg={profileInfo.weightKg}
         reachCm={profileInfo.reachCm}
         weightClassLabel={profileInfo.weightClass ? tw(profileInfo.weightClass, lang) : ""}
+        skills={skillData.map((s) => ({ label: tc(s.skill, lang), value: s.value }))}
         lang={lang}
       />
     </div>
