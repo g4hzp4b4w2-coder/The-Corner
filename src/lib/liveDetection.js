@@ -95,30 +95,29 @@ const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
 const GUARD_DROP_COOLDOWN_MS = 1500;
 
-const STYLE_TEMPLATES = {
-  straight: { x: 0.3, y: 0 },
-  hook: { x: 0.9, y: 0 },
-  uppercut: { x: 0.2, y: -0.9 },
-};
+// A hook and a straight move the wrist in essentially the SAME direction
+// relative to its own shoulder (mostly horizontal) — a hook just swings
+// much further. Direction-only similarity can't tell them apart at all;
+// the previous version encoded that "further" as a bigger-magnitude
+// template but then compared templates by cosine similarity, which
+// strips magnitude out entirely, so hook and straight scored identically
+// and hook could mathematically never win. Uppercut IS a genuinely
+// different direction (upward, not horizontal), so that stays
+// direction-based; hook vs straight is split by how wide the swing was
+// relative to this person's own recent punches, the same adapt-to-the-
+// person approach already used for the speed threshold.
+const UPPERCUT_UP_FRACTION = 0.65;
+const HOOK_DISPLACEMENT_RATIO = 1.3;
+const MIN_DISPLACEMENT_SAMPLES = 3;
 
-function classifyStyle(dir) {
-  const shaped = { x: Math.abs(dir.x), y: dir.y };
-  const mag = Math.hypot(shaped.x, shaped.y) || 1;
-  const unit = { x: shaped.x / mag, y: shaped.y / mag };
-
-  let best = "straight";
-  let bestScore = -Infinity;
-  for (const style of ["straight", "hook", "uppercut"]) {
-    const t = STYLE_TEMPLATES[style];
-    const tShaped = { x: Math.abs(t.x), y: t.y };
-    const tMag = Math.hypot(tShaped.x, tShaped.y) || 1;
-    const score = (unit.x * tShaped.x + unit.y * tShaped.y) / tMag; // cosine similarity
-    if (score > bestScore) {
-      bestScore = score;
-      best = style;
-    }
+function classifyStyle(dir, recentDisplacements) {
+  const mag = Math.hypot(dir.x, dir.y) || 0.0001;
+  const upFraction = -dir.y / mag;
+  if (upFraction > UPPERCUT_UP_FRACTION) return "uppercut";
+  if (recentDisplacements.length >= MIN_DISPLACEMENT_SAMPLES && mag > median(recentDisplacements) * HOOK_DISPLACEMENT_RATIO) {
+    return "hook";
   }
-  return best;
+  return "straight";
 }
 
 function median(values) {
@@ -155,6 +154,7 @@ export function createPunchDetector() {
   let shoulderWidth = 0.2;
   let maxShoulderWidth = 0;
   const recentPeaks = [];
+  const recentDisplacements = [];
 
   function currentThresholds() {
     if (recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
@@ -206,10 +206,15 @@ export function createPunchDetector() {
               const gotProminence = arm.curMax - arm.curMin;
               if (arm.curMax > floor && gotProminence > prominence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
                 const dir = { x: arm.peakRel.x - arm.valleyRel.x, y: arm.peakRel.y - arm.valleyRel.y };
-                events.push({ type: "punch", side, style: classifyStyle(dir), t: arm.curMaxT });
+                const style = classifyStyle(dir, recentDisplacements);
+                events.push({ type: "punch", side, style, t: arm.curMaxT });
                 arm.lastPeakT = arm.curMaxT;
                 recentPeaks.push(arm.curMax);
                 if (recentPeaks.length > ROLLING_WINDOW) recentPeaks.shift();
+                if (style !== "uppercut") {
+                  recentDisplacements.push(Math.hypot(dir.x, dir.y));
+                  if (recentDisplacements.length > ROLLING_WINDOW) recentDisplacements.shift();
+                }
               }
               arm.resolved = true;
               arm.curMin = speed;
