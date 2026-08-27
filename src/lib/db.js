@@ -179,6 +179,45 @@ export async function addPostComment(postId, userId, { name, initials, text }) {
   return { id: data.id, name: data.name, initials: data.initials, text: data.text, timestamp: new Date(data.created_at).getTime() };
 }
 
+export async function getMatchPollVotes(matchId, userId) {
+  const { data, error } = await supabase.from("match_poll_votes").select("choice, user_id").eq("match_id", matchId);
+  if (error) throw error;
+  const counts = { a: 0, b: 0 };
+  let myChoice = null;
+  data.forEach((v) => {
+    counts[v.choice] = (counts[v.choice] || 0) + 1;
+    if (v.user_id === userId) myChoice = v.choice;
+  });
+  return { counts, myChoice };
+}
+
+export async function voteOnMatch(matchId, userId, choice) {
+  const { error } = await supabase
+    .from("match_poll_votes")
+    .upsert({ match_id: matchId, user_id: userId, choice }, { onConflict: "match_id,user_id" });
+  if (error) throw error;
+}
+
+export async function getMatchComments(matchId) {
+  const { data, error } = await supabase
+    .from("match_comments")
+    .select("*")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data.map((c) => ({ id: c.id, name: c.name, initials: c.initials, text: c.text, timestamp: new Date(c.created_at).getTime() }));
+}
+
+export async function addMatchComment(matchId, userId, { name, initials, text }) {
+  const { data, error } = await supabase
+    .from("match_comments")
+    .insert({ match_id: matchId, user_id: userId, name, initials, text })
+    .select()
+    .single();
+  if (error) throw error;
+  return { id: data.id, name: data.name, initials: data.initials, text: data.text, timestamp: new Date(data.created_at).getTime() };
+}
+
 export async function toggleLike(postId, userId, currentlyLiked) {
   if (currentlyLiked) {
     const { error } = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", userId);
