@@ -7,8 +7,8 @@ async function fetchFreshNews(lang) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const system =
     lang === "en"
-      ? `Search the web for 5-6 real, current or upcoming boxing events. Cover a mix: (1) major internationally broadcast fights/title cards (the kind aired on platforms like DAZN, ESPN, etc.), and (2) Turkey-based tournaments/federation events if you find good ones. Don't limit yourself to only local events — actively look for big-name upcoming cards too. After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "weight": "weight class or 'All classes'", "date": "date as found", "venue": "city/venue"}]. Only include events you found real evidence for — never invent one.`
-      : `5-6 gerçek, güncel ya da yaklaşan boks etkinliği için web'de arama yap. Karışık bir liste olsun: (1) büyük, uluslararası yayınlanan maçlar/başlık maçları (DAZN, ESPN gibi platformlarda yayınlanan türden), ve (2) bulabilirsen Türkiye'deki turnuva/federasyon etkinlikleri. Sadece yerel etkinliklerle sınırlı kalma — yaklaşan büyük isimli maçları da aktif olarak ara. Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih", "venue": "şehir/mekan"}]. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
+      ? `Search the web for 5-6 real, current or upcoming boxing events. Cover a mix: (1) major internationally broadcast fights/title cards (the kind aired on platforms like DAZN, ESPN, etc.), and (2) Turkey-based tournaments/federation events if you find good ones. Don't limit yourself to only local events — actively look for big-name upcoming cards too. After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "fighterA": "first boxer's name or null", "fighterB": "second boxer's name or null", "weight": "weight class or 'All classes'", "date": "date as found", "venue": "city/venue"}]. Only set fighterA/fighterB when this is a clean single 1-vs-1 headline matchup you're confident about — leave both null for multi-fight tournaments/events without one clear headline pairing. Only include events you found real evidence for — never invent one.`
+      : `5-6 gerçek, güncel ya da yaklaşan boks etkinliği için web'de arama yap. Karışık bir liste olsun: (1) büyük, uluslararası yayınlanan maçlar/başlık maçları (DAZN, ESPN gibi platformlarda yayınlanan türden), ve (2) bulabilirsen Türkiye'deki turnuva/federasyon etkinlikleri. Sadece yerel etkinliklerle sınırlı kalma — yaklaşan büyük isimli maçları da aktif olarak ara. Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "fighterA": "birinci boksörün adı ya da null", "fighterB": "ikinci boksörün adı ya da null", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih", "venue": "şehir/mekan"}]. fighterA/fighterB alanlarını SADECE net, tek bir 1'e 1 başlık maçından eminsen doldur — birden çok maçlık bir turnuva/etkinlikse ya da tek bir net eşleşme yoksa ikisini de null bırak. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -66,42 +66,72 @@ export default async function handler(req, res) {
   const lang = params?.lang || "tr";
   const force = params?.force === "1" || params?.force === true;
 
+  async function loadStoredMatches() {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/matches?lang=eq.${lang}&select=id,label,fighter_a,fighter_b,weight,date,venue,updated_at&order=created_at.desc&limit=15`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    );
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function toItem(row) {
+    return {
+      id: row.id,
+      fighters: row.label,
+      fighterA: row.fighter_a || null,
+      fighterB: row.fighter_b || null,
+      weight: row.weight,
+      date: row.date,
+      venue: row.venue,
+    };
+  }
+
   try {
-    const cacheRes = await fetch(`${supabaseUrl}/rest/v1/match_news_cache?lang=eq.${lang}&select=items,updated_at`, {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-    });
-    const cacheRows = await cacheRes.json();
-    const cached = Array.isArray(cacheRows) ? cacheRows[0] : null;
-    const isStale = force || !cached || Date.now() - new Date(cached.updated_at).getTime() > CACHE_MAX_AGE_MS;
+    const stored = await loadStoredMatches();
+    const newestUpdate = stored.length > 0 ? Math.max(...stored.map((r) => new Date(r.updated_at).getTime())) : 0;
+    const isStale = force || stored.length === 0 || Date.now() - newestUpdate > CACHE_MAX_AGE_MS;
 
     if (!isStale) {
-      res.status(200).json({ items: cached.items, refreshed: false });
+      res.status(200).json({ items: stored.map(toItem), refreshed: false });
       return;
     }
 
-    let items;
+    let fresh;
     try {
-      items = await fetchFreshNews(lang);
+      fresh = await fetchFreshNews(lang);
     } catch (e) {
-      if (cached) {
-        res.status(200).json({ items: cached.items, refreshed: false, staleFallback: true });
+      if (stored.length > 0) {
+        res.status(200).json({ items: stored.map(toItem), refreshed: false, staleFallback: true });
         return;
       }
       throw e;
     }
 
-    await fetch(`${supabaseUrl}/rest/v1/match_news_cache?lang=eq.${lang}`, {
-      method: "PATCH",
+    const rows = fresh.map((m) => ({
+      lang,
+      label: m.fighters,
+      fighter_a: m.fighterA || null,
+      fighter_b: m.fighterB || null,
+      weight: m.weight || null,
+      date: m.date || null,
+      venue: m.venue || null,
+      updated_at: new Date().toISOString(),
+    }));
+
+    await fetch(`${supabaseUrl}/rest/v1/matches?on_conflict=lang,label,date`, {
+      method: "POST",
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
         "content-type": "application/json",
-        Prefer: "return=minimal",
+        Prefer: "resolution=merge-duplicates,return=minimal",
       },
-      body: JSON.stringify({ items, updated_at: new Date().toISOString() }),
+      body: JSON.stringify(rows),
     });
 
-    res.status(200).json({ items, refreshed: true });
+    const updated = await loadStoredMatches();
+    res.status(200).json({ items: updated.map(toItem), refreshed: true });
   } catch (err) {
     res.status(500).json({ error: err.message || "Unknown error" });
   }

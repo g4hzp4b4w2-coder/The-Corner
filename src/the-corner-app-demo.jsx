@@ -18,6 +18,10 @@ import {
   reportPost as reportPostDb,
   getPostComments,
   addPostComment,
+  getMatchPollVotes,
+  voteOnMatch,
+  getMatchComments,
+  addMatchComment,
   toggleLike as toggleLikeDb,
   getChatMessages,
   resetChatMessages,
@@ -50,6 +54,9 @@ const translations = {
   communityTitle: { tr: "Topluluk", en: "Community" },
   feedLabel: { tr: "Akış", en: "Feed" },
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
+  whoWinsLabel: { tr: "Kim kazanır?", en: "Who wins?" },
+  voteCountLabel: { tr: "oy", en: "votes" },
+  discussLabel: { tr: "Konuş", en: "Discuss" },
   chatSubTab: { tr: "Sohbet", en: "Chat" },
   videoAnalysisSubTab: { tr: "Video Analiz", en: "Video Analysis" },
   liveTrainingSubTab: { tr: "Canlı Antrenman", en: "Live Training" },
@@ -1264,10 +1271,89 @@ function ComposeBox({ onSubmit, userId, lang }) {
   );
 }
 
-function MatchNewsList({ lang }) {
+function MatchPoll({ matchId, fighterA, fighterB, currentUserId, lang }) {
+  const [counts, setCounts] = useState(null);
+  const [myChoice, setMyChoice] = useState(null);
+  const [voting, setVoting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMatchPollVotes(matchId, currentUserId)
+      .then((res) => {
+        if (cancelled) return;
+        setCounts(res.counts);
+        setMyChoice(res.myChoice);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [matchId, currentUserId]);
+
+  const vote = async (choice) => {
+    if (voting || choice === myChoice) return;
+    setVoting(true);
+    const prevChoice = myChoice;
+    setMyChoice(choice);
+    setCounts((prev) => {
+      const next = { ...(prev || { a: 0, b: 0 }) };
+      if (prevChoice) next[prevChoice] = Math.max(0, next[prevChoice] - 1);
+      next[choice] = (next[choice] || 0) + 1;
+      return next;
+    });
+    try {
+      await voteOnMatch(matchId, currentUserId, choice);
+    } finally {
+      setVoting(false);
+    }
+  };
+
+  const total = counts ? counts.a + counts.b : 0;
+  const pctA = total > 0 ? Math.round((counts.a / total) * 100) : 0;
+  const pctB = total > 0 ? 100 - pctA : 0;
+
+  return (
+    <div className="mb-2">
+      <p className="text-neutral-500 text-[11px] mb-1.5">{t(lang, "whoWinsLabel")}</p>
+      <div className="flex gap-1.5">
+        {[
+          { key: "a", label: fighterA, pct: pctA },
+          { key: "b", label: fighterB, pct: pctB },
+        ].map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => vote(opt.key)}
+            className={`relative flex-1 overflow-hidden text-xs rounded-lg border px-2.5 py-2 text-left transition-colors ${
+              myChoice === opt.key ? "border-red-900 text-red-400" : "border-neutral-800 text-neutral-400"
+            }`}
+          >
+            <div
+              className="absolute inset-y-0 left-0 bg-red-950"
+              style={{ width: counts ? `${opt.pct}%` : 0 }}
+              aria-hidden="true"
+            />
+            <span className="relative flex items-center justify-between gap-1">
+              <span className="truncate">{opt.label}</span>
+              {counts && <span className="shrink-0 font-medium">{opt.pct}%</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+      {total > 0 && (
+        <p className="text-neutral-600 text-[10px] mt-1">
+          {total} {t(lang, "voteCountLabel")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MatchNewsList({ currentUserId, displayName, lang }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [liveCounts, setLiveCounts] = useState({});
 
   const load = (force) => {
     setError("");
@@ -1307,17 +1393,43 @@ function MatchNewsList({ lang }) {
         </p>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {items.map((m, i) => (
-            <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+          {items.map((m) => (
+            <div key={m.id || m.fighters} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
               <div className="flex items-start justify-between mb-1">
                 <span className="text-neutral-100 text-sm font-medium">{m.fighters}</span>
                 <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">
                   {m.weight}
                 </span>
               </div>
-              <p className="text-neutral-500 text-xs">
+              <p className="text-neutral-500 text-xs mb-2">
                 {m.date} · {m.venue}
               </p>
+
+              {m.id && m.fighterA && m.fighterB && (
+                <MatchPoll matchId={m.id} fighterA={m.fighterA} fighterB={m.fighterB} currentUserId={currentUserId} lang={lang} />
+              )}
+
+              {m.id && (
+                <button
+                  onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+                  className="flex items-center gap-1 text-neutral-500 hover:text-neutral-300 text-xs transition-colors"
+                >
+                  <MessageCircle size={13} />
+                  {liveCounts[m.id] ?? t(lang, "discussLabel")}
+                </button>
+              )}
+
+              {m.id && expandedId === m.id && (
+                <CommentThread
+                  itemId={m.id}
+                  currentUserId={currentUserId}
+                  displayName={displayName}
+                  fetchComments={getMatchComments}
+                  addComment={addMatchComment}
+                  onCountChange={(n) => setLiveCounts((prev) => ({ ...prev, [m.id]: n }))}
+                  lang={lang}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -1326,7 +1438,7 @@ function MatchNewsList({ lang }) {
   );
 }
 
-function CommentThread({ postId, currentUserId, displayName, onCountChange, lang }) {
+function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetchComments, addComment, lang }) {
   const [comments, setComments] = useState(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -1334,7 +1446,7 @@ function CommentThread({ postId, currentUserId, displayName, onCountChange, lang
 
   useEffect(() => {
     let cancelled = false;
-    getPostComments(postId)
+    fetchComments(itemId)
       .then((res) => {
         if (!cancelled) {
           setComments(res);
@@ -1348,7 +1460,7 @@ function CommentThread({ postId, currentUserId, displayName, onCountChange, lang
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postId]);
+  }, [itemId]);
 
   const submit = async () => {
     const text = draft.trim();
@@ -1358,7 +1470,7 @@ function CommentThread({ postId, currentUserId, displayName, onCountChange, lang
     try {
       const name = displayName || "—";
       const initials = computeInitials(name);
-      const saved = await addPostComment(postId, currentUserId, { name, initials, text });
+      const saved = await addComment(itemId, currentUserId, { name, initials, text });
       setComments((prev) => {
         const next = [...(prev || []), saved];
         onCountChange(next.length);
@@ -1456,7 +1568,7 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
       </div>
 
       {view === "news" ? (
-        <MatchNewsList lang={lang} />
+        <MatchNewsList currentUserId={currentUserId} displayName={displayName} lang={lang} />
       ) : (
         <>
           <ComposeBox onSubmit={onPost} userId={currentUserId} lang={lang} />
@@ -1595,9 +1707,11 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
 
                     {expandedId === p.id && (
                       <CommentThread
-                        postId={p.id}
+                        itemId={p.id}
                         currentUserId={currentUserId}
                         displayName={displayName}
+                        fetchComments={getPostComments}
+                        addComment={addPostComment}
                         onCountChange={(n) => setLiveCounts((prev) => ({ ...prev, [p.id]: n }))}
                         lang={lang}
                       />
