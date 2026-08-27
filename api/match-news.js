@@ -7,8 +7,8 @@ async function fetchFreshNews(lang) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const system =
     lang === "en"
-      ? `Search the web for 5-6 real, current or upcoming boxing events. Cover a mix: (1) major internationally broadcast fights/title cards (the kind aired on platforms like DAZN, ESPN, etc.), and (2) Turkey-based tournaments/federation events if you find good ones. Don't limit yourself to only local events — actively look for big-name upcoming cards too. After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "fighterA": "first boxer's name or null", "fighterB": "second boxer's name or null", "weight": "weight class or 'All classes'", "date": "date as found", "venue": "city/venue"}]. Only set fighterA/fighterB when this is a clean single 1-vs-1 headline matchup you're confident about — leave both null for multi-fight tournaments/events without one clear headline pairing. Only include events you found real evidence for — never invent one.`
-      : `5-6 gerçek, güncel ya da yaklaşan boks etkinliği için web'de arama yap. Karışık bir liste olsun: (1) büyük, uluslararası yayınlanan maçlar/başlık maçları (DAZN, ESPN gibi platformlarda yayınlanan türden), ve (2) bulabilirsen Türkiye'deki turnuva/federasyon etkinlikleri. Sadece yerel etkinliklerle sınırlı kalma — yaklaşan büyük isimli maçları da aktif olarak ara. Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "fighterA": "birinci boksörün adı ya da null", "fighterB": "ikinci boksörün adı ya da null", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih", "venue": "şehir/mekan"}]. fighterA/fighterB alanlarını SADECE net, tek bir 1'e 1 başlık maçından eminsen doldur — birden çok maçlık bir turnuva/etkinlikse ya da tek bir net eşleşme yoksa ikisini de null bırak. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
+      ? `Search the web for 5-6 real, current or upcoming boxing events. Cover a mix: (1) major internationally broadcast fights/title cards (the kind aired on platforms like DAZN, ESPN, etc.), and (2) Turkey-based tournaments/federation events if you find good ones. Don't limit yourself to only local events — actively look for big-name upcoming cards too. After searching, respond ONLY with a JSON array, nothing else, in this exact shape: [{"fighters": "event or matchup name", "fighterA": "first boxer's name or null", "fighterB": "second boxer's name or null", "weight": "weight class or 'All classes'", "date": "date as found, human readable", "dateIso": "the event's date in strict YYYY-MM-DD format if you're confident of the exact day, otherwise null", "venue": "city/venue"}]. Only set fighterA/fighterB when this is a clean single 1-vs-1 headline matchup you're confident about — leave both null for multi-fight tournaments/events without one clear headline pairing. Only include events you found real evidence for — never invent one.`
+      : `5-6 gerçek, güncel ya da yaklaşan boks etkinliği için web'de arama yap. Karışık bir liste olsun: (1) büyük, uluslararası yayınlanan maçlar/başlık maçları (DAZN, ESPN gibi platformlarda yayınlanan türden), ve (2) bulabilirsen Türkiye'deki turnuva/federasyon etkinlikleri. Sadece yerel etkinliklerle sınırlı kalma — yaklaşan büyük isimli maçları da aktif olarak ara. Arama sonrası SADECE şu JSON formatında bir dizi döndür, başka hiçbir şey yazma: [{"fighters": "etkinlik/eşleşme adı", "fighterA": "birinci boksörün adı ya da null", "fighterB": "ikinci boksörün adı ya da null", "weight": "sıklet ya da 'Tüm sıklet'", "date": "bulduğun tarih, okunabilir biçimde", "dateIso": "etkinliğin tarihi kesin YYYY-MM-DD formatında, eğer tam günden eminsen; değilsen null", "venue": "şehir/mekan"}]. fighterA/fighterB alanlarını SADECE net, tek bir 1'e 1 başlık maçından eminsen doldur — birden çok maçlık bir turnuva/etkinlikse ya da tek bir net eşleşme yoksa ikisini de null bırak. Sadece gerçekten kanıt bulduğun etkinlikleri ekle, asla uydurma.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
 
   async function loadStoredMatches() {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/matches?lang=eq.${lang}&select=id,label,fighter_a,fighter_b,weight,date,venue,updated_at&order=created_at.desc&limit=15`,
+      `${supabaseUrl}/rest/v1/matches?lang=eq.${lang}&select=id,label,fighter_a,fighter_b,weight,date,date_iso,venue,updated_at&order=created_at.desc&limit=15`,
       { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
     );
     const rows = await res.json();
@@ -83,6 +83,7 @@ export default async function handler(req, res) {
       fighterB: row.fighter_b || null,
       weight: row.weight,
       date: row.date,
+      dateIso: row.date_iso || null,
       venue: row.venue,
     };
   }
@@ -108,6 +109,7 @@ export default async function handler(req, res) {
       throw e;
     }
 
+    const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
     const rows = fresh.map((m) => ({
       lang,
       label: m.fighters,
@@ -115,6 +117,7 @@ export default async function handler(req, res) {
       fighter_b: m.fighterB || null,
       weight: m.weight || null,
       date: m.date || null,
+      date_iso: typeof m.dateIso === "string" && isoDatePattern.test(m.dateIso) ? m.dateIso : null,
       venue: m.venue || null,
       updated_at: new Date().toISOString(),
     }));

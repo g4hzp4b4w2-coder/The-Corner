@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, Share2, Image as ImageIcon, Flag } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, ChevronLeft, Share2, Image as ImageIcon, Flag } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -56,7 +56,13 @@ const translations = {
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
   whoWinsLabel: { tr: "Kim kazanır?", en: "Who wins?" },
   voteCountLabel: { tr: "oy", en: "votes" },
-  discussLabel: { tr: "Konuş", en: "Discuss" },
+  discussionTitle: { tr: "Tartışma", en: "Discussion" },
+  backLabel: { tr: "Geri", en: "Back" },
+  liveTodayLabel: { tr: "BUGÜN", en: "TODAY" },
+  pollOpensFightDayLabel: {
+    tr: "Anket ve tartışma maç günü açılacak.",
+    en: "The poll and discussion open on fight day.",
+  },
   chatSubTab: { tr: "Sohbet", en: "Chat" },
   videoAnalysisSubTab: { tr: "Video Analiz", en: "Video Analysis" },
   liveTrainingSubTab: { tr: "Canlı Antrenman", en: "Live Training" },
@@ -1348,12 +1354,62 @@ function MatchPoll({ matchId, fighterA, fighterB, currentUserId, lang }) {
   );
 }
 
+function todayIsoLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function MatchDetailView({ match: m, currentUserId, displayName, onBack, lang }) {
+  const isFightDay = !!m.dateIso && m.dateIso === todayIsoLocal();
+
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-neutral-500 hover:text-neutral-300 text-xs mb-3 transition-colors"
+      >
+        <ChevronLeft size={14} />
+        {t(lang, "backLabel")}
+      </button>
+
+      <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-3">
+        <div className="flex items-start justify-between mb-1">
+          <span className="text-neutral-100 text-base font-semibold">{m.fighters}</span>
+          <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">{m.weight}</span>
+        </div>
+        <p className="text-neutral-500 text-xs">
+          {m.date} · {m.venue}
+        </p>
+      </div>
+
+      {isFightDay ? (
+        <>
+          {m.fighterA && m.fighterB && (
+            <MatchPoll matchId={m.id} fighterA={m.fighterA} fighterB={m.fighterB} currentUserId={currentUserId} lang={lang} />
+          )}
+          <p className="text-neutral-300 text-xs font-semibold mb-2">{t(lang, "discussionTitle")}</p>
+          <CommentThread
+            itemId={m.id}
+            currentUserId={currentUserId}
+            displayName={displayName}
+            fetchComments={getMatchComments}
+            addComment={addMatchComment}
+            onCountChange={() => {}}
+            lang={lang}
+          />
+        </>
+      ) : (
+        <p className="text-neutral-600 text-xs text-center py-8">{t(lang, "pollOpensFightDayLabel")}</p>
+      )}
+    </div>
+  );
+}
+
 function MatchNewsList({ currentUserId, displayName, lang }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
-  const [liveCounts, setLiveCounts] = useState({});
+  const [selectedMatch, setSelectedMatch] = useState(null);
 
   const load = (force) => {
     setError("");
@@ -1369,6 +1425,20 @@ function MatchNewsList({ currentUserId, displayName, lang }) {
     load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
+
+  if (selectedMatch) {
+    return (
+      <MatchDetailView
+        match={selectedMatch}
+        currentUserId={currentUserId}
+        displayName={displayName}
+        onBack={() => setSelectedMatch(null)}
+        lang={lang}
+      />
+    );
+  }
+
+  const today = todayIsoLocal();
 
   return (
     <div>
@@ -1394,43 +1464,28 @@ function MatchNewsList({ currentUserId, displayName, lang }) {
       ) : (
         <div className="flex flex-col gap-2.5">
           {items.map((m) => (
-            <div key={m.id || m.fighters} className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+            <button
+              key={m.id || m.fighters}
+              onClick={() => m.id && setSelectedMatch(m)}
+              disabled={!m.id}
+              className="text-left bg-neutral-900 border border-neutral-800 rounded-xl p-3 hover:border-neutral-700 transition-colors disabled:opacity-70"
+            >
               <div className="flex items-start justify-between mb-1">
                 <span className="text-neutral-100 text-sm font-medium">{m.fighters}</span>
                 <span className="text-[11px] bg-amber-950 text-amber-400 border border-amber-900 px-2 py-0.5 rounded">
                   {m.weight}
                 </span>
               </div>
-              <p className="text-neutral-500 text-xs mb-2">
+              <p className="text-neutral-500 text-xs">
                 {m.date} · {m.venue}
               </p>
-
-              {m.id && m.fighterA && m.fighterB && (
-                <MatchPoll matchId={m.id} fighterA={m.fighterA} fighterB={m.fighterB} currentUserId={currentUserId} lang={lang} />
+              {m.id && m.dateIso === today && (
+                <span className="inline-flex items-center gap-1 text-red-500 text-[10px] font-semibold mt-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+                  {t(lang, "liveTodayLabel")}
+                </span>
               )}
-
-              {m.id && (
-                <button
-                  onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
-                  className="flex items-center gap-1 text-neutral-500 hover:text-neutral-300 text-xs transition-colors"
-                >
-                  <MessageCircle size={13} />
-                  {liveCounts[m.id] ?? t(lang, "discussLabel")}
-                </button>
-              )}
-
-              {m.id && expandedId === m.id && (
-                <CommentThread
-                  itemId={m.id}
-                  currentUserId={currentUserId}
-                  displayName={displayName}
-                  fetchComments={getMatchComments}
-                  addComment={addMatchComment}
-                  onCountChange={(n) => setLiveCounts((prev) => ({ ...prev, [m.id]: n }))}
-                  lang={lang}
-                />
-              )}
-            </div>
+            </button>
           ))}
         </div>
       )}
