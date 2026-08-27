@@ -56,11 +56,14 @@ const CONFIRM_DELAY_MS = 150;
 // Minimum time between two counted punches on the same arm, independent
 // of prominence — a hard backstop against anything faster than humanly
 // real.
-const MIN_PEAK_SPACING_MS = 240;
+const MIN_PEAK_SPACING_MS = 320;
 // How far speed has to climb above the current valley floor before it
 // counts as the start of a new rise, rather than noise wobbling at the
-// bottom of an already-resolved dip.
-const RISE_START_MARGIN = 0.15;
+// bottom of an already-resolved dip. Hooks/uppercuts swing through a
+// curved path, so their retraction often has a brief speed wobble as the
+// arm changes rotation plane — a small margin here reads that wobble as
+// a second punch. Kept high enough to require a genuinely new full rise.
+const RISE_START_MARGIN = 0.22;
 
 const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
