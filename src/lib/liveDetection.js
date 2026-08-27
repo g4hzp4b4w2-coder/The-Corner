@@ -140,27 +140,31 @@ function initArmState() {
     lastPeakT: -Infinity,
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
+    // Kept per-arm, not shared: a lead hand (jab) and rear hand (cross/
+    // power) throw at systematically different speeds and amplitudes for
+    // almost every boxer, since they're mechanically different punches.
+    // A single shared baseline gets pulled up by the bigger arm's punches
+    // and then misses the other arm's genuinely smaller, quicker ones.
+    recentPeaks: [],
+    recentDisplacements: [],
   };
 }
 
 // Returns a fresh detector with its own per-arm state machine and its own
-// adaptive baseline (shared between both arms — punch intensity is a
-// property of the person/fatigue right now, not which arm). Call
-// update(landmarks, t) once per frame with the current single-person
-// landmarks and a monotonically increasing timestamp in ms (e.g.
-// performance.now()); it returns any events that just happened.
+// per-arm adaptive baseline. Call update(landmarks, t) once per frame with
+// the current single-person landmarks and a monotonically increasing
+// timestamp in ms (e.g. performance.now()); it returns any events that
+// just happened.
 export function createPunchDetector() {
   const arms = { left: initArmState(), right: initArmState() };
   let shoulderWidth = 0.2;
   let maxShoulderWidth = 0;
-  const recentPeaks = [];
-  const recentDisplacements = [];
 
-  function currentThresholds() {
-    if (recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
+  function currentThresholds(arm) {
+    if (arm.recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
       return { floor: BOOTSTRAP_FLOOR, prominence: BOOTSTRAP_PROMINENCE };
     }
-    const baseline = median(recentPeaks) * ADAPT_RATIO;
+    const baseline = median(arm.recentPeaks) * ADAPT_RATIO;
     return {
       floor: Math.max(baseline, ABSOLUTE_MIN_FLOOR),
       prominence: Math.max(baseline, ABSOLUTE_MIN_PROMINENCE),
@@ -202,18 +206,18 @@ export function createPunchDetector() {
               arm.peakRel = { ...rel };
             }
             if (t - arm.curMaxT > CONFIRM_DELAY_MS) {
-              const { floor, prominence } = currentThresholds();
+              const { floor, prominence } = currentThresholds(arm);
               const gotProminence = arm.curMax - arm.curMin;
               if (arm.curMax > floor && gotProminence > prominence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
                 const dir = { x: arm.peakRel.x - arm.valleyRel.x, y: arm.peakRel.y - arm.valleyRel.y };
-                const style = classifyStyle(dir, recentDisplacements);
+                const style = classifyStyle(dir, arm.recentDisplacements);
                 events.push({ type: "punch", side, style, t: arm.curMaxT });
                 arm.lastPeakT = arm.curMaxT;
-                recentPeaks.push(arm.curMax);
-                if (recentPeaks.length > ROLLING_WINDOW) recentPeaks.shift();
+                arm.recentPeaks.push(arm.curMax);
+                if (arm.recentPeaks.length > ROLLING_WINDOW) arm.recentPeaks.shift();
                 if (style !== "uppercut") {
-                  recentDisplacements.push(Math.hypot(dir.x, dir.y));
-                  if (recentDisplacements.length > ROLLING_WINDOW) recentDisplacements.shift();
+                  arm.recentDisplacements.push(Math.hypot(dir.x, dir.y));
+                  if (arm.recentDisplacements.length > ROLLING_WINDOW) arm.recentDisplacements.shift();
                 }
               }
               arm.resolved = true;
