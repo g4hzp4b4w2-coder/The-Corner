@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, ChevronLeft, Share2, Image as ImageIcon, Flag } from "lucide-react";
+import { Flame, CalendarDays, Users, User, Plus, Video, TrendingUp, Heart, MessageCircle, Bell, X, Award, Newspaper, Lock, Sparkles, CalendarRange, Circle, CircleCheck, BadgeCheck, Languages, LogOut, RefreshCw, Trash2, Send, ChevronDown, ChevronLeft, Share2, Image as ImageIcon, Flag, Trophy } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 import {
@@ -35,6 +35,7 @@ import LiveTrainingTab from "./LiveTrainingTab";
 import FrameFlipbook from "./FrameFlipbook";
 import FighterCardModal from "./FighterCard";
 import PublicProfileModal from "./PublicProfileModal";
+import ChallengesBoard from "./ChallengesBoard";
 import { CATEGORY_LIST, computeInitials, tc, tw } from "./lib/labels";
 
 const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
@@ -55,6 +56,7 @@ const translations = {
   communityTitle: { tr: "Topluluk", en: "Community" },
   feedLabel: { tr: "Akış", en: "Feed" },
   matchNewsLabel: { tr: "Maç haberleri", en: "Match news" },
+  boardLabel: { tr: "Yarışma", en: "Challenges" },
   whoWinsLabel: { tr: "Kim kazanır?", en: "Who wins?" },
   voteCountLabel: { tr: "oy", en: "votes" },
   discussionTitle: { tr: "Tartışma", en: "Discussion" },
@@ -1570,7 +1572,7 @@ function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetc
   );
 }
 
-function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, currentUserId, displayName, onOpenProfile, lang }) {
+function CommunityTab({ posts, entries, onLike, onPost, onDeletePost, onReportPost, currentUserId, displayName, onOpenProfile, lang }) {
   const [view, setView] = useState("feed");
   const [expandedId, setExpandedId] = useState(null);
   const [liveCounts, setLiveCounts] = useState({});
@@ -1610,10 +1612,21 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
           <Newspaper size={12} />
           {t(lang, "matchNewsLabel")}
         </button>
+        <button
+          onClick={() => setView("board")}
+          className={`flex-1 text-xs py-1.5 rounded-md flex items-center justify-center gap-1 transition-colors ${
+            view === "board" ? "bg-red-600 text-neutral-950 font-medium" : "text-neutral-500"
+          }`}
+        >
+          <Trophy size={12} />
+          {t(lang, "boardLabel")}
+        </button>
       </div>
 
       {view === "news" ? (
         <MatchNewsList currentUserId={currentUserId} displayName={displayName} onOpenProfile={onOpenProfile} lang={lang} />
+      ) : view === "board" ? (
+        <ChallengesBoard entries={entries} currentUserId={currentUserId} lang={lang} />
       ) : (
         <>
           <ComposeBox onSubmit={onPost} userId={currentUserId} lang={lang} />
@@ -3210,6 +3223,7 @@ export default function TheCornerApp() {
       ) : tab === "community" ? (
         <CommunityTab
           posts={posts}
+          entries={entries}
           onLike={toggleLike}
           onPost={addPost}
           onDeletePost={deletePost}
