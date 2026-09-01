@@ -166,6 +166,12 @@ export function createPunchDetector() {
   const arms = { left: initArmState(), right: initArmState() };
   let shoulderWidth = 0.2;
   let maxShoulderWidth = 0;
+  // How bladed the stance got at its worst moment this round (1 = always
+  // square to the widest reading seen, lower = turned more side-on at some
+  // point) — the single biggest known driver of count accuracy, so it's
+  // exposed for the UI to turn into an honest confidence signal instead of
+  // presenting every count as equally trustworthy.
+  let minShoulderWidthRatio = 1;
 
   function currentThresholds(arm) {
     if (arm.recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
@@ -185,6 +191,9 @@ export function createPunchDetector() {
     const nose = landmarks[NOSE];
     shoulderWidth = shoulderWidthOf(landmarks, shoulderWidth);
     maxShoulderWidth = Math.max(maxShoulderWidth, shoulderWidth);
+    if (maxShoulderWidth > 0) {
+      minShoulderWidthRatio = Math.min(minShoulderWidthRatio, shoulderWidth / maxShoulderWidth);
+    }
     const effectiveShoulderWidth = Math.max(shoulderWidth, maxShoulderWidth * MIN_SHOULDER_WIDTH_RATIO);
 
     for (const side of ["left", "right"]) {
@@ -274,5 +283,9 @@ export function createPunchDetector() {
     return events;
   }
 
-  return { update };
+  function getDiagnostics() {
+    return { minShoulderWidthRatio };
+  }
+
+  return { update, getDiagnostics };
 }

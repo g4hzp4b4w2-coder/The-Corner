@@ -45,6 +45,18 @@ const COPY = {
   sessionSummaryTitle: { tr: "Antrenman özeti", en: "Training summary" },
   newTrainingLabel: { tr: "Yeni antrenman", en: "New training" },
   perRoundLabel: { tr: "Raund", en: "Round" },
+  confidenceHigh: { tr: "Yüksek güven", en: "High confidence" },
+  confidenceMedium: { tr: "Orta güven", en: "Medium confidence" },
+  confidenceLow: { tr: "Düşük güven", en: "Low confidence" },
+  confidenceHint: {
+    tr: "Kameraya daha dönük dur, sayım daha güvenilir olur.",
+    en: "Face the camera more directly for a more reliable count.",
+  },
+  correctCountLabel: { tr: "Bu sayı yanlış mıydı? Düzelt", en: "Was this count wrong? Fix it" },
+  correctCountPlaceholder: { tr: "Gerçek sayı", en: "Actual count" },
+  saveCorrectionLabel: { tr: "Kaydet", en: "Save" },
+  correctedLabel: { tr: "Düzeltildi", en: "Corrected" },
+  aiCountLabel: { tr: "AI sayımı", en: "AI count" },
 };
 
 function c(key, lang) {
@@ -70,6 +82,87 @@ function sumStats(list) {
       guardDrops: acc.guardDrops + r.guardDrops,
     }),
     { ...emptyRoundStats }
+  );
+}
+
+// The single biggest known driver of count accuracy is camera framing
+// (turning bladed relative to the camera shrinks the shoulder-width scale
+// the whole detector normalizes by). Rather than present every count as
+// equally trustworthy, turn that one signal into an honest confidence
+// level instead of silently miscounting.
+function confidenceLevel(diagnostics) {
+  if (!diagnostics) return "high";
+  if (diagnostics.minShoulderWidthRatio >= 0.72) return "high";
+  if (diagnostics.minShoulderWidthRatio >= 0.5) return "medium";
+  return "low";
+}
+
+function ConfidenceBadge({ level, lang }) {
+  const styles = {
+    high: "bg-emerald-950 border-emerald-900 text-emerald-400",
+    medium: "bg-amber-950 border-amber-900 text-amber-400",
+    low: "bg-red-950 border-red-900 text-red-400",
+  };
+  const labelKey = { high: "confidenceHigh", medium: "confidenceMedium", low: "confidenceLow" }[level];
+  return (
+    <div className={`flex flex-col gap-0.5 border rounded-lg px-2.5 py-2 ${styles[level] || styles.high}`}>
+      <span className="text-xs font-medium">{c(labelKey, lang)}</span>
+      {level !== "high" && <span className="text-[11px] opacity-80">{c("confidenceHint", lang)}</span>}
+    </div>
+  );
+}
+
+function CountCorrection({ round, roundIndex, onCorrect, lang }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const aiTotal = round.left + round.right;
+
+  if (round.correctedTotal != null) {
+    return (
+      <p className="text-neutral-500 text-[11px]">
+        {c("correctedLabel", lang)}: <span className="text-neutral-200 font-medium">{round.correctedTotal}</span>{" "}
+        ({c("aiCountLabel", lang)}: {aiTotal})
+      </p>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => {
+          setEditing(true);
+          setValue(String(aiTotal));
+        }}
+        className="text-neutral-500 hover:text-neutral-300 text-[11px] text-left underline decoration-dotted transition-colors"
+      >
+        {c("correctCountLabel", lang)}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={c("correctCountPlaceholder", lang)}
+        className="w-20 bg-neutral-950 border border-neutral-800 text-neutral-200 text-xs rounded-lg px-2 py-1.5"
+      />
+      <button
+        onClick={() => {
+          const n = Number(value);
+          if (Number.isFinite(n) && n >= 0) {
+            onCorrect(roundIndex, n);
+            setEditing(false);
+          }
+        }}
+        className="bg-red-600 hover:bg-red-500 text-neutral-950 text-[11px] font-medium rounded-lg px-2.5 py-1.5 transition-colors"
+      >
+        {c("saveCorrectionLabel", lang)}
+      </button>
+    </div>
   );
 }
 
@@ -182,9 +275,15 @@ export default function ShadowBoxingMode({ lang, onBack }) {
 
   const endRound = () => {
     playGong();
-    setRoundsHistory((prev) => [...prev, { ...roundStatsRef.current }]);
+    const diagnostics = detectorRef.current?.getDiagnostics?.();
+    const confidence = confidenceLevel(diagnostics);
+    setRoundsHistory((prev) => [...prev, { ...roundStatsRef.current, confidence, correctedTotal: null }]);
     phaseRef.current = "roundEnd";
     setPhase("roundEnd");
+  };
+
+  const applyCorrection = (roundIndex, correctedTotal) => {
+    setRoundsHistory((prev) => prev.map((r, i) => (i === roundIndex ? { ...r, correctedTotal } : r)));
   };
 
   const abortSession = () => {
@@ -397,6 +496,8 @@ export default function ShadowBoxingMode({ lang, onBack }) {
             {c("roundSummaryTitle", lang)} · {c("perRoundLabel", lang)} {currentRound}
           </p>
           <StatsGrid stats={lastRound} lang={lang} />
+          <ConfidenceBadge level={lastRound.confidence} lang={lang} />
+          <CountCorrection round={lastRound} roundIndex={roundsHistory.length - 1} onCorrect={applyCorrection} lang={lang} />
           {currentRound < roundCount ? (
             <button
               onClick={() => beginRound(currentRound + 1)}
@@ -427,7 +528,9 @@ export default function ShadowBoxingMode({ lang, onBack }) {
                   {c("perRoundLabel", lang)} {i + 1}
                 </span>
                 <span className="text-neutral-300 text-xs">
-                  {r.left + r.right} {lang === "en" ? "punches" : "yumruk"} · {r.guardDrops} {c("guardDropsLabel", lang).toLowerCase()}
+                  {r.correctedTotal ?? r.left + r.right} {lang === "en" ? "punches" : "yumruk"}
+                  {r.correctedTotal != null ? ` (${c("correctedLabel", lang).toLowerCase()})` : ""} · {r.guardDrops}{" "}
+                  {c("guardDropsLabel", lang).toLowerCase()}
                 </span>
               </div>
             ))}
