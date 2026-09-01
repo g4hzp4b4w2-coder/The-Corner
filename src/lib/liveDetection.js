@@ -85,11 +85,18 @@ const CONFIRM_DELAY_MS = 150;
 const MIN_PEAK_SPACING_MS = 320;
 // How far speed has to climb above the current valley floor before it
 // counts as the start of a new rise, rather than noise wobbling at the
-// bottom of an already-resolved dip. Hooks/uppercuts swing through a
-// curved path, so their retraction often has a brief speed wobble as the
-// arm changes rotation plane — a small margin here reads that wobble as
-// a second punch. Kept high enough to require a genuinely new full rise.
-const RISE_START_MARGIN = 0.22;
+// bottom of an already-resolved dip. Every punch's retraction has some
+// wobble as the arm decelerates and changes direction — how BIG that
+// wobble is scales with how hard the person actually punches (a longer-
+// levered or more committed puncher snaps back harder than someone
+// throwing quick, light shots). A fixed margin tuned against one body/
+// style either reads a power puncher's retraction as a second punch, or
+// misses a quick puncher's real fast combo — real tests hit both
+// failures with different testers. Scaling it off this arm's own
+// adapted prominence (same "learn this person" approach as the speed
+// threshold) tracks whichever regime this arm is actually in.
+const RISE_MARGIN_RATIO = 0.3;
+const ABSOLUTE_MIN_RISE_MARGIN = 0.15;
 
 const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
@@ -228,11 +235,14 @@ export function createPunchDetector() {
             if (speed < arm.curMin) {
               arm.curMin = speed;
               arm.valleyRel = { ...rel };
-            } else if (speed > arm.curMin + RISE_START_MARGIN) {
-              arm.resolved = false;
-              arm.curMax = speed;
-              arm.curMaxT = t;
-              arm.peakRel = { ...rel };
+            } else {
+              const riseMargin = Math.max(currentThresholds(arm).prominence * RISE_MARGIN_RATIO, ABSOLUTE_MIN_RISE_MARGIN);
+              if (speed > arm.curMin + riseMargin) {
+                arm.resolved = false;
+                arm.curMax = speed;
+                arm.curMaxT = t;
+                arm.peakRel = { ...rel };
+              }
             }
           }
         }
