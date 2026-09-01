@@ -60,6 +60,7 @@ function rowToEntry(row) {
     frames: row.frames || [],
     planKey: row.plan_key,
     threeMinRounds: row.three_min_rounds || 0,
+    competes: row.competes !== false,
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -90,6 +91,7 @@ export async function addJournalEntry(userId, entry) {
       frames: entry.frames || [],
       plan_key: entry.planKey || null,
       three_min_rounds: entry.threeMinRounds || 0,
+      competes: entry.competes !== false,
     })
     .select()
     .single();

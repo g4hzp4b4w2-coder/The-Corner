@@ -91,11 +91,12 @@ export function getWeeklyChallenges(entries, lang, now = Date.now()) {
   const seed = weekSeed(now);
   const start = (seed * 3) % POOL.length;
   const weekStart = startOfWeekMonday(now);
-  const weekEntries = entries.filter((e) => e.createdAt >= weekStart);
+  const competingEntries = entries.filter((e) => e.competes !== false);
+  const weekEntries = competingEntries.filter((e) => e.createdAt >= weekStart);
 
   return [0, 1, 2].map((i) => {
     const ch = POOL[(start + i) % POOL.length];
-    const raw = ch.compute(weekEntries, entries, now);
+    const raw = ch.compute(weekEntries, competingEntries, now);
     const current = Math.min(ch.target, raw);
     return {
       key: ch.key,

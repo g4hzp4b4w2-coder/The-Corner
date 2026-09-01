@@ -65,6 +65,11 @@ const COPY = {
   saveToJournalLabel: { tr: "Günlüğe kaydet", en: "Save to journal" },
   savingToJournalLabel: { tr: "Kaydediliyor...", en: "Saving..." },
   savedToJournalLabel: { tr: "Günlüğe kaydedildi", en: "Saved to journal" },
+  competesLabel: { tr: "Bu seansı yarışmaya dahil et", en: "Count this session in the competition" },
+  competesHint: {
+    tr: "Açıksa bu antrenman haftalık hedeflere ve liderlik tablosuna sayılır.",
+    en: "When on, this session counts toward weekly challenges and the leaderboard.",
+  },
 };
 
 function c(key, lang) {
@@ -237,6 +242,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [saveStatus, setSaveStatus] = useState("idle");
+  const [competes, setCompetes] = useState(true);
 
   const teardownCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -313,6 +319,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
     setRoundsHistory([]);
     setNote("");
     setSaveStatus("idle");
+    setCompetes(true);
   };
 
   const finishTraining = () => {
@@ -330,7 +337,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
     const blocks = buildSessionBlocks(roundsHistory, lang);
     const threeMinRounds = roundDuration === 180 ? roundsHistory.length : 0;
     try {
-      await onSaveLiveSession({ note, blocks, duration, threeMinRounds });
+      await onSaveLiveSession({ note, blocks, duration, threeMinRounds, competes });
       setSaveStatus("saved");
     } catch {
       setSaveStatus("idle");
@@ -586,6 +593,27 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
                 disabled={saveStatus !== "idle"}
                 className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-xs rounded-lg px-3 py-2 resize-none disabled:opacity-60"
               />
+
+              <button
+                onClick={() => setCompetes((v) => !v)}
+                disabled={saveStatus !== "idle"}
+                className="flex items-center justify-between gap-3 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2.5 disabled:opacity-60 text-left"
+              >
+                <span>
+                  <span className="block text-neutral-200 text-xs font-medium">{c("competesLabel", lang)}</span>
+                  <span className="block text-neutral-600 text-[10px] mt-0.5 leading-snug">{c("competesHint", lang)}</span>
+                </span>
+                <span
+                  className={`relative w-9 h-5 rounded-full shrink-0 transition-colors ${competes ? "bg-red-600" : "bg-neutral-700"}`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-neutral-100 transition-transform ${
+                      competes ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </button>
+
               <button
                 onClick={handleSaveToJournal}
                 disabled={saveStatus !== "idle"}

@@ -42,7 +42,7 @@ export default async function handler(req, res) {
   try {
     const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
     const [entriesRes, profilesRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/journal_entries?select=user_id,created_at,three_min_rounds`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/journal_entries?select=user_id,created_at,three_min_rounds,competes`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/profiles?select=user_id,display_name`, { headers }),
     ]);
     if (!entriesRes.ok || !profilesRes.ok) {
@@ -59,10 +59,12 @@ export default async function handler(req, res) {
     });
 
     const timestampsByUser = {};
-    entries.forEach((e) => {
-      const ts = new Date(e.created_at).getTime();
-      (timestampsByUser[e.user_id] ||= []).push({ ts, rounds: e.three_min_rounds || 0 });
-    });
+    entries
+      .filter((e) => e.competes !== false)
+      .forEach((e) => {
+        const ts = new Date(e.created_at).getTime();
+        (timestampsByUser[e.user_id] ||= []).push({ ts, rounds: e.three_min_rounds || 0 });
+      });
 
     const now = Date.now();
     const weekAgo = now - 7 * DAY_MS;
