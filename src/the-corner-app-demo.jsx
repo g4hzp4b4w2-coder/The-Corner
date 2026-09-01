@@ -813,7 +813,7 @@ function StreakStrip({ entries, longestStreak, lang }) {
   );
 }
 
-function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
+function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis, onSaveLiveSession }) {
   const [subTab, setSubTab] = useState("chat");
 
   return (
@@ -860,7 +860,7 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis }) {
             onSentToChat={() => setSubTab("chat")}
           />
         ) : (
-          <LiveTrainingTab lang={lang} />
+          <LiveTrainingTab lang={lang} onSaveLiveSession={onSaveLiveSession} />
         )}
       </div>
     </div>
@@ -2966,6 +2966,20 @@ export default function TheCornerApp() {
     setEntries((prev) => [entry, ...prev]);
   };
 
+  const saveLiveSession = async ({ note, blocks, duration }) => {
+    const entry = await addJournalEntry(session.user.id, {
+      label: t(lang, "liveTrainingSubTab"),
+      type: "Gölge Boksu",
+      categories: ["Hız", "Teknik"],
+      duration,
+      note,
+      blocks,
+      tags: [],
+      hasVideo: false,
+    });
+    setEntries((prev) => [entry, ...prev]);
+  };
+
   const deleteEntry = async (id) => {
     const prevEntries = entries;
     setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -3162,7 +3176,14 @@ export default function TheCornerApp() {
           <JournalTab entries={entries} onAddClick={() => setShowForm(true)} onShareEntry={shareJournalEntry} onDeleteEntry={deleteEntry} lang={lang} />
         )
       ) : tab === "coach" ? (
-        <CoachTab userId={session.user.id} profileInfo={profileInfo} entries={entries} lang={lang} onSaveVideoAnalysis={saveVideoAnalysis} />
+        <CoachTab
+          userId={session.user.id}
+          profileInfo={profileInfo}
+          entries={entries}
+          lang={lang}
+          onSaveVideoAnalysis={saveVideoAnalysis}
+          onSaveLiveSession={saveLiveSession}
+        />
       ) : tab === "calendar" ? (
         <CalendarTab
           onMarkDone={addPlanEntry}

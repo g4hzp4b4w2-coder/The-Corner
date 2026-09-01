@@ -32,11 +32,11 @@ function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
 }
 
-export default function LiveTrainingTab({ lang }) {
+export default function LiveTrainingTab({ lang, onSaveLiveSession }) {
   const [mode, setMode] = useState(null);
 
   if (mode === "shadow") {
-    return <ShadowBoxingMode lang={lang} onBack={() => setMode(null)} />;
+    return <ShadowBoxingMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
   }
 
   return (

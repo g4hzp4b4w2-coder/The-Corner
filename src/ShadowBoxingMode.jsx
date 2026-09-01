@@ -57,6 +57,14 @@ const COPY = {
   saveCorrectionLabel: { tr: "Kaydet", en: "Save" },
   correctedLabel: { tr: "Düzeltildi", en: "Corrected" },
   aiCountLabel: { tr: "AI sayımı", en: "AI count" },
+  noteLabel: { tr: "Not (opsiyonel)", en: "Note (optional)" },
+  notePlaceholder: {
+    tr: "Bu antrenman hakkında not ekle...",
+    en: "Add a note about this session...",
+  },
+  saveToJournalLabel: { tr: "Günlüğe kaydet", en: "Save to journal" },
+  savingToJournalLabel: { tr: "Kaydediliyor...", en: "Saving..." },
+  savedToJournalLabel: { tr: "Günlüğe kaydedildi", en: "Saved to journal" },
 };
 
 function c(key, lang) {
@@ -166,6 +174,17 @@ function CountCorrection({ round, roundIndex, onCorrect, lang }) {
   );
 }
 
+function buildSessionBlocks(roundsHistory, lang) {
+  return roundsHistory.map((r, i) => {
+    const total = r.correctedTotal ?? r.left + r.right;
+    const roundLabel = `${c("perRoundLabel", lang)} ${i + 1}`;
+    if (lang === "en") {
+      return `${roundLabel}: ${total} punches (${r.left} left, ${r.right} right) · ${r.guardDrops} guard drops`;
+    }
+    return `${roundLabel}: ${total} yumruk (${r.left} sol, ${r.right} sağ) · ${r.guardDrops} guard düşüşü`;
+  });
+}
+
 function StatsGrid({ stats, lang }) {
   const total = stats.left + stats.right;
   return (
@@ -192,7 +211,7 @@ function StatsGrid({ stats, lang }) {
   );
 }
 
-export default function ShadowBoxingMode({ lang, onBack }) {
+export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -207,7 +226,7 @@ export default function ShadowBoxingMode({ lang, onBack }) {
 
   // setup | prep | round | roundEnd | sessionEnd
   const [phase, setPhase] = useState("setup");
-  const [roundCount, setRoundCount] = useState(3);
+  const [roundCount, setRoundCount] = useState(6);
   const [roundDuration, setRoundDuration] = useState(180);
   const [currentRound, setCurrentRound] = useState(1);
   const [roundsHistory, setRoundsHistory] = useState([]);
@@ -216,6 +235,8 @@ export default function ShadowBoxingMode({ lang, onBack }) {
   const [guardWarning, setGuardWarning] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [saveStatus, setSaveStatus] = useState("idle");
 
   const teardownCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -290,12 +311,29 @@ export default function ShadowBoxingMode({ lang, onBack }) {
     teardownCamera();
     setPhase("setup");
     setRoundsHistory([]);
+    setNote("");
+    setSaveStatus("idle");
   };
 
   const finishTraining = () => {
     teardownCamera();
     phaseRef.current = "sessionEnd";
     setPhase("sessionEnd");
+  };
+
+  const handleSaveToJournal = async () => {
+    if (!onSaveLiveSession || saveStatus !== "idle") return;
+    setSaveStatus("saving");
+    const totalSeconds = roundsHistory.length * roundDuration;
+    const minutes = Math.max(1, Math.round(totalSeconds / 60));
+    const duration = lang === "en" ? `${minutes} min` : `${minutes} dk`;
+    const blocks = buildSessionBlocks(roundsHistory, lang);
+    try {
+      await onSaveLiveSession({ note, blocks, duration });
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("idle");
+    }
   };
 
   const startTraining = async () => {
@@ -535,6 +573,35 @@ export default function ShadowBoxingMode({ lang, onBack }) {
               </div>
             ))}
           </div>
+
+          {onSaveLiveSession && (
+            <div className="flex flex-col gap-2">
+              <p className="text-neutral-400 text-xs">{c("noteLabel", lang)}</p>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={c("notePlaceholder", lang)}
+                rows={3}
+                disabled={saveStatus !== "idle"}
+                className="w-full bg-neutral-950 border border-neutral-800 text-neutral-200 text-xs rounded-lg px-3 py-2 resize-none disabled:opacity-60"
+              />
+              <button
+                onClick={handleSaveToJournal}
+                disabled={saveStatus !== "idle"}
+                className={`w-full text-sm font-medium rounded-lg py-2.5 transition-colors ${
+                  saveStatus === "saved"
+                    ? "bg-neutral-900 border border-emerald-900 text-emerald-400"
+                    : "bg-red-600 hover:bg-red-500 text-neutral-950"
+                } ${saveStatus === "saving" ? "opacity-60" : ""}`}
+              >
+                {saveStatus === "saved"
+                  ? c("savedToJournalLabel", lang)
+                  : saveStatus === "saving"
+                  ? c("savingToJournalLabel", lang)
+                  : c("saveToJournalLabel", lang)}
+              </button>
+            </div>
+          )}
 
           <button
             onClick={abortSession}
