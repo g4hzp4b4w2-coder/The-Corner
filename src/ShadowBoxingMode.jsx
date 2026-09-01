@@ -328,8 +328,9 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession }) {
     const minutes = Math.max(1, Math.round(totalSeconds / 60));
     const duration = lang === "en" ? `${minutes} min` : `${minutes} dk`;
     const blocks = buildSessionBlocks(roundsHistory, lang);
+    const threeMinRounds = roundDuration === 180 ? roundsHistory.length : 0;
     try {
-      await onSaveLiveSession({ note, blocks, duration });
+      await onSaveLiveSession({ note, blocks, duration, threeMinRounds });
       setSaveStatus("saved");
     } catch {
       setSaveStatus("idle");

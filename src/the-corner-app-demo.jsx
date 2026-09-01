@@ -2991,7 +2991,7 @@ export default function TheCornerApp() {
     setEntries((prev) => [entry, ...prev]);
   };
 
-  const saveLiveSession = async ({ note, blocks, duration }) => {
+  const saveLiveSession = async ({ note, blocks, duration, threeMinRounds }) => {
     const entry = await addJournalEntry(session.user.id, {
       label: t(lang, "liveTrainingSubTab"),
       type: "Gölge Boksu",
@@ -3001,6 +3001,7 @@ export default function TheCornerApp() {
       blocks,
       tags: [],
       hasVideo: false,
+      threeMinRounds,
     });
     setEntries((prev) => [entry, ...prev]);
   };

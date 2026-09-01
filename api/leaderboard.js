@@ -42,7 +42,7 @@ export default async function handler(req, res) {
   try {
     const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
     const [entriesRes, profilesRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/journal_entries?select=user_id,created_at`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/journal_entries?select=user_id,created_at,three_min_rounds`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/profiles?select=user_id,display_name`, { headers }),
     ]);
     if (!entriesRes.ok || !profilesRes.ok) {
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     const timestampsByUser = {};
     entries.forEach((e) => {
       const ts = new Date(e.created_at).getTime();
-      (timestampsByUser[e.user_id] ||= []).push(ts);
+      (timestampsByUser[e.user_id] ||= []).push({ ts, rounds: e.three_min_rounds || 0 });
     });
 
     const now = Date.now();
@@ -70,18 +70,21 @@ export default async function handler(req, res) {
     const leaderboard = Object.keys(timestampsByUser)
       .filter((userId) => nameByUser[userId])
       .map((userId) => {
-        const timestamps = timestampsByUser[userId];
+        const records = timestampsByUser[userId];
+        const timestamps = records.map((r) => r.ts);
+        const weekRecords = records.filter((r) => r.ts >= weekAgo);
         return {
           userId,
           displayName: nameByUser[userId],
-          weeklySessions: timestamps.filter((t) => t >= weekAgo).length,
+          weeklySessions: weekRecords.length,
+          weeklyRounds: weekRecords.reduce((sum, r) => sum + r.rounds, 0),
           streak: computeStreak(timestamps, now),
           totalSessions: timestamps.length,
         };
       })
       .filter((r) => r.weeklySessions > 0 || r.streak > 0)
       .sort((a, b) => b.weeklySessions - a.weeklySessions || b.streak - a.streak)
-      .slice(0, 20);
+      .slice(0, 50);
 
     res.status(200).json({ leaderboard });
   } catch (err) {
