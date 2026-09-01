@@ -34,8 +34,9 @@ import VideoAnalysisTab from "./VideoAnalysisTab";
 import LiveTrainingTab from "./LiveTrainingTab";
 import FrameFlipbook from "./FrameFlipbook";
 import FighterCardModal from "./FighterCard";
+import PublicProfileModal from "./PublicProfileModal";
+import { CATEGORY_LIST, computeInitials, tc, tw } from "./lib/labels";
 
-const CATEGORY_LIST = ["Güç", "Defans", "Teknik", "Fight IQ", "Hız"];
 const POST_TOPICS = ["Genel", "Soru", "Başarı", "Teknik"];
 
 const translations = {
@@ -243,13 +244,6 @@ function timeAgo(timestamp, lang) {
   return lang === "en" ? `${diffDay}d ago` : `${diffDay}g önce`;
 }
 
-function computeInitials(name) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.slice(0, 2).map((p) => p[0].toUpperCase());
-  return letters.join("") || "?";
-}
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function startOfDay(ts) {
@@ -326,33 +320,6 @@ function computeWeeklyTrend(entries, weeks, lang) {
     buckets.push({ label: formatShortDate(weekStart, lang), count });
   }
   return buckets;
-}
-
-const categoryTranslations = {
-  Güç: { tr: "Güç", en: "Power" },
-  Defans: { tr: "Defans", en: "Defense" },
-  Teknik: { tr: "Teknik", en: "Technique" },
-  "Fight IQ": { tr: "Fight IQ", en: "Fight IQ" },
-  Hız: { tr: "Hız", en: "Speed" },
-  "Ayak işi": { tr: "Ayak işi", en: "Footwork" },
-  Diğer: { tr: "Diğer", en: "Other" },
-};
-function tc(cat, lang) {
-  return categoryTranslations[cat] ? categoryTranslations[cat][lang] || cat : cat;
-}
-
-const weightClassTranslations = {
-  Sineksiklet: { tr: "Sineksiklet", en: "Flyweight" },
-  Horozsiklet: { tr: "Horozsiklet", en: "Bantamweight" },
-  Tüysiklet: { tr: "Tüysiklet", en: "Featherweight" },
-  Hafifsiklet: { tr: "Hafifsiklet", en: "Lightweight" },
-  Yarıortasiklet: { tr: "Yarıortasiklet", en: "Welterweight" },
-  Ortasiklet: { tr: "Ortasiklet", en: "Middleweight" },
-  Ağıryarısiklet: { tr: "Ağıryarısiklet", en: "Light heavyweight" },
-  Ağırsiklet: { tr: "Ağırsiklet", en: "Heavyweight" },
-};
-function tw(weightClass, lang) {
-  return weightClassTranslations[weightClass] ? weightClassTranslations[weightClass][lang] || weightClass : weightClass;
 }
 
 const postTopicTranslations = {
@@ -1359,7 +1326,7 @@ function todayIsoLocal() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function MatchDetailView({ match: m, currentUserId, displayName, onBack, lang }) {
+function MatchDetailView({ match: m, currentUserId, displayName, onBack, onOpenProfile, lang }) {
   const isFightDay = !!m.dateIso && m.dateIso === todayIsoLocal();
 
   return (
@@ -1395,6 +1362,7 @@ function MatchDetailView({ match: m, currentUserId, displayName, onBack, lang })
             fetchComments={getMatchComments}
             addComment={addMatchComment}
             onCountChange={() => {}}
+            onOpenProfile={onOpenProfile}
             lang={lang}
           />
         </>
@@ -1405,7 +1373,7 @@ function MatchDetailView({ match: m, currentUserId, displayName, onBack, lang })
   );
 }
 
-function MatchNewsList({ currentUserId, displayName, lang }) {
+function MatchNewsList({ currentUserId, displayName, onOpenProfile, lang }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -1433,6 +1401,7 @@ function MatchNewsList({ currentUserId, displayName, lang }) {
         currentUserId={currentUserId}
         displayName={displayName}
         onBack={() => setSelectedMatch(null)}
+        onOpenProfile={onOpenProfile}
         lang={lang}
       />
     );
@@ -1493,7 +1462,7 @@ function MatchNewsList({ currentUserId, displayName, lang }) {
   );
 }
 
-function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetchComments, addComment, lang }) {
+function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetchComments, addComment, onOpenProfile, lang }) {
   const [comments, setComments] = useState(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -1546,17 +1515,38 @@ function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetc
       ) : comments.length === 0 ? (
         <p className="text-neutral-700 text-[11px]">{lang === "en" ? "No comments yet." : "Henüz yorum yok."}</p>
       ) : (
-        comments.map((c) => (
-          <div key={c.id} className="flex items-start gap-2">
-            <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 text-[9px] font-medium shrink-0 mt-0.5">
-              {c.initials}
+        comments.map((c) => {
+          const clickable = onOpenProfile && c.userId && c.userId !== currentUserId;
+          return (
+            <div key={c.id} className="flex items-start gap-2">
+              {clickable ? (
+                <button
+                  onClick={() => onOpenProfile(c.userId)}
+                  className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 text-[9px] font-medium shrink-0 mt-0.5 hover:opacity-80 transition-opacity"
+                >
+                  {c.initials}
+                </button>
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 text-[9px] font-medium shrink-0 mt-0.5">
+                  {c.initials}
+                </div>
+              )}
+              <div>
+                {clickable ? (
+                  <button
+                    onClick={() => onOpenProfile(c.userId)}
+                    className="text-neutral-300 text-[11px] font-medium hover:underline decoration-dotted"
+                  >
+                    {c.name}
+                  </button>
+                ) : (
+                  <span className="text-neutral-300 text-[11px] font-medium">{c.name}</span>
+                )}{" "}
+                <span className="text-neutral-400 text-[11px]">{c.text}</span>
+              </div>
             </div>
-            <div>
-              <span className="text-neutral-300 text-[11px] font-medium">{c.name}</span>{" "}
-              <span className="text-neutral-400 text-[11px]">{c.text}</span>
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
       {error && <p className="text-red-400 text-[11px]">{error}</p>}
       <div className="flex items-center gap-1.5">
@@ -1580,7 +1570,7 @@ function CommentThread({ itemId, currentUserId, displayName, onCountChange, fetc
   );
 }
 
-function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, currentUserId, displayName, lang }) {
+function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, currentUserId, displayName, onOpenProfile, lang }) {
   const [view, setView] = useState("feed");
   const [expandedId, setExpandedId] = useState(null);
   const [liveCounts, setLiveCounts] = useState({});
@@ -1623,7 +1613,7 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
       </div>
 
       {view === "news" ? (
-        <MatchNewsList currentUserId={currentUserId} displayName={displayName} lang={lang} />
+        <MatchNewsList currentUserId={currentUserId} displayName={displayName} onOpenProfile={onOpenProfile} lang={lang} />
       ) : (
         <>
           <ComposeBox onSubmit={onPost} userId={currentUserId} lang={lang} />
@@ -1685,14 +1675,34 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
               {visiblePosts.map((p) => (
                   <div key={p.id} className={`bg-neutral-900 rounded-xl p-3 ${p.verified ? "border border-red-900" : "border border-neutral-800"}`}>
                     <div className="flex items-center gap-2 mb-2">
-                      <div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-                          p.verified ? "bg-red-600 text-neutral-950" : "bg-red-950 border border-red-900 text-red-500"
-                        }`}
-                      >
-                        {p.initials}
-                      </div>
-                      <span className="text-neutral-100 text-sm font-medium">{p.name}</span>
+                      {p.userId === currentUserId ? (
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
+                            p.verified ? "bg-red-600 text-neutral-950" : "bg-red-950 border border-red-900 text-red-500"
+                          }`}
+                        >
+                          {p.initials}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onOpenProfile(p.userId)}
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-opacity hover:opacity-80 ${
+                            p.verified ? "bg-red-600 text-neutral-950" : "bg-red-950 border border-red-900 text-red-500"
+                          }`}
+                        >
+                          {p.initials}
+                        </button>
+                      )}
+                      {p.userId === currentUserId ? (
+                        <span className="text-neutral-100 text-sm font-medium">{p.name}</span>
+                      ) : (
+                        <button
+                          onClick={() => onOpenProfile(p.userId)}
+                          className="text-neutral-100 text-sm font-medium hover:underline decoration-dotted"
+                        >
+                          {p.name}
+                        </button>
+                      )}
                       {p.verified && (
                         <span className="flex items-center gap-0.5 text-red-500 text-[10px] bg-red-950 border border-red-900 px-1.5 py-0.5 rounded">
                           <BadgeCheck size={11} /> {t(lang, "verifiedCoachLabel")}
@@ -1768,6 +1778,7 @@ function CommunityTab({ posts, onLike, onPost, onDeletePost, onReportPost, curre
                         fetchComments={getPostComments}
                         addComment={addPostComment}
                         onCountChange={(n) => setLiveCounts((prev) => ({ ...prev, [p.id]: n }))}
+                        onOpenProfile={onOpenProfile}
                         lang={lang}
                       />
                     )}
@@ -2895,6 +2906,7 @@ export default function TheCornerApp() {
   const [retryTick, setRetryTick] = useState(0);
   const [lang, setLang] = useState("tr");
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [viewProfileUserId, setViewProfileUserId] = useState(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -3202,6 +3214,7 @@ export default function TheCornerApp() {
           onReportPost={submitReport}
           currentUserId={session.user.id}
           displayName={profileInfo.displayName}
+          onOpenProfile={setViewProfileUserId}
           lang={lang}
         />
       ) : (
@@ -3216,6 +3229,14 @@ export default function TheCornerApp() {
           lang={lang}
         />
       )}
+
+      <PublicProfileModal
+        open={!!viewProfileUserId}
+        userId={viewProfileUserId}
+        posts={posts}
+        lang={lang}
+        onClose={() => setViewProfileUserId(null)}
+      />
     </AppShell>
   );
 }

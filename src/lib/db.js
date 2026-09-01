@@ -166,7 +166,14 @@ export async function getPostComments(postId) {
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data.map((c) => ({ id: c.id, name: c.name, initials: c.initials, text: c.text, timestamp: new Date(c.created_at).getTime() }));
+  return data.map((c) => ({
+    id: c.id,
+    userId: c.user_id,
+    name: c.name,
+    initials: c.initials,
+    text: c.text,
+    timestamp: new Date(c.created_at).getTime(),
+  }));
 }
 
 export async function addPostComment(postId, userId, { name, initials, text }) {
@@ -176,7 +183,14 @@ export async function addPostComment(postId, userId, { name, initials, text }) {
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, name: data.name, initials: data.initials, text: data.text, timestamp: new Date(data.created_at).getTime() };
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    initials: data.initials,
+    text: data.text,
+    timestamp: new Date(data.created_at).getTime(),
+  };
 }
 
 export async function getMatchPollVotes(matchId, userId) {
@@ -205,7 +219,14 @@ export async function getMatchComments(matchId) {
     .eq("match_id", matchId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data.map((c) => ({ id: c.id, name: c.name, initials: c.initials, text: c.text, timestamp: new Date(c.created_at).getTime() }));
+  return data.map((c) => ({
+    id: c.id,
+    userId: c.user_id,
+    name: c.name,
+    initials: c.initials,
+    text: c.text,
+    timestamp: new Date(c.created_at).getTime(),
+  }));
 }
 
 export async function addMatchComment(matchId, userId, { name, initials, text }) {
@@ -215,7 +236,14 @@ export async function addMatchComment(matchId, userId, { name, initials, text })
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, name: data.name, initials: data.initials, text: data.text, timestamp: new Date(data.created_at).getTime() };
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    initials: data.initials,
+    text: data.text,
+    timestamp: new Date(data.created_at).getTime(),
+  };
 }
 
 export async function toggleLike(postId, userId, currentlyLiked) {
