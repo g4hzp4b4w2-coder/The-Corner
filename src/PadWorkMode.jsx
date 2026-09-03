@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, X, Minus, Plus } from "lucide-react";
 import { createPoseSession } from "./lib/poseAnalysis";
-import { SHOULDER, relWrist, shoulderWidthOf, visible } from "./lib/poseMath";
-import { pickTarget, checkTarget, TARGET_TIMEOUT_MS } from "./lib/reactionTarget";
+import { SHOULDER, visible } from "./lib/poseMath";
+import { pickTarget, checkTarget, HIT_RADIUS, TARGET_TIMEOUT_MS } from "./lib/reactionTarget";
+import { createReactionTracker } from "./lib/reactionTracker";
 import { playGong, playHitTone } from "./lib/gongSound";
 
 const ROUND_DURATIONS = [60, 120, 180];
 const PREP_MS = 5000;
-const MIN_SHOULDER_WIDTH_RATIO = 0.75;
 
 const COPY = {
   subtitle: {
@@ -91,7 +91,7 @@ export default function PadWorkMode({ lang, onBack, onSaveLiveSession }) {
   const targetRef = useRef(null);
   const lastTargetKeyRef = useRef(null);
   const roundStatsRef = useRef({ hits: 0, misses: 0, reactionTimes: [] });
-  const shoulderWidthRef = useRef({ current: 0.2, max: 0 });
+  const trackerRef = useRef(null);
 
   // setup | prep | round | roundEnd | sessionEnd
   const [phase, setPhase] = useState("setup");
@@ -130,7 +130,7 @@ export default function PadWorkMode({ lang, onBack, onSaveLiveSession }) {
     setLiveStats({ hits: 0, misses: 0, reactionTimes: [] });
     targetRef.current = null;
     lastTargetKeyRef.current = null;
-    shoulderWidthRef.current = { current: 0.2, max: 0 };
+    trackerRef.current = createReactionTracker();
     setCurrentRound(roundNumber);
     phaseEndRef.current = performance.now() + roundDuration * 1000;
     lastCountdownRef.current = -1;
@@ -210,30 +210,55 @@ export default function PadWorkMode({ lang, onBack, onSaveLiveSession }) {
       const ctx = canvas.getContext("2d");
       const loop = () => {
         if (!streamRef.current) return;
+        // Draw the true (unmirrored) frame first and detect pose on THAT —
+        // MediaPipe's left/right landmark labeling is trained on normal
+        // camera orientation, so detecting on an already-mirrored image
+        // risks scrambling exactly the left/right distinction this whole
+        // mode depends on. Only after detection do we redraw the frame
+        // mirrored for display (like a mirror/selfie view, so moving your
+        // right hand visibly moves right on screen) — cheap to draw twice,
+        // and keeps detection correctness completely separate from display.
         ctx.drawImage(video, 0, 0, width, height);
         const people = poseSessionRef.current ? poseSessionRef.current.detectAll(canvas) : [];
         const landmarks = people[0] || null;
+
+        ctx.save();
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, width, height);
+        ctx.restore();
 
         const now = performance.now();
         const currentPhase = phaseRef.current;
         const timedPhase = currentPhase === "prep" || currentPhase === "round";
 
-        if (landmarks) {
-          const sw = shoulderWidthRef.current;
-          sw.current = shoulderWidthOf(landmarks, sw.current);
-          sw.max = Math.max(sw.max, sw.current);
-        }
-        const effectiveShoulderWidth = Math.max(shoulderWidthRef.current.current, shoulderWidthRef.current.max * MIN_SHOULDER_WIDTH_RATIO);
-
         if (currentPhase === "round") {
+          trackerRef.current?.update(landmarks, now);
+
           if (!targetRef.current) {
             const t = pickTarget(lastTargetKeyRef.current);
-            lastTargetKeyRef.current = t.key;
-            targetRef.current = { ...t, spawnT: now, timeoutAt: now + TARGET_TIMEOUT_MS };
+            const shoulder = landmarks ? landmarks[SHOULDER[t.side]] : null;
+            const sw = trackerRef.current?.getShoulderWidth();
+            if (shoulder && visible(shoulder) && sw > 0) {
+              lastTargetKeyRef.current = t.key;
+              targetRef.current = {
+                ...t,
+                spawnT: now,
+                timeoutAt: now + TARGET_TIMEOUT_MS,
+                // Frozen at spawn, not recomputed every frame — otherwise
+                // the target visibly drifts/wobbles as the body naturally
+                // sways while reaching for it, which reads as "it's
+                // tracking me" and is distracting mid-punch.
+                screenX: (shoulder.x + t.rel.x * sw) * width,
+                screenY: (shoulder.y + t.rel.y * sw) * height,
+                screenRadius: Math.max(28, HIT_RADIUS * sw * width),
+              };
+            }
           } else {
             const target = targetRef.current;
-            const rel = landmarks ? relWrist(landmarks, target.side, effectiveShoulderWidth) : null;
-            const outcome = checkTarget(target, rel, now);
+            const rel = trackerRef.current?.getRel(target.side);
+            const speed = trackerRef.current?.getRecentPeakSpeed(target.side) || 0;
+            const outcome = checkTarget(target, rel, speed, now);
             if (outcome === "hit") {
               const reactionMs = now - target.spawnT;
               roundStatsRef.current = {
@@ -252,29 +277,36 @@ export default function PadWorkMode({ lang, onBack, onSaveLiveSession }) {
             }
           }
 
-          if (targetRef.current && landmarks) {
-            const shoulder = landmarks[SHOULDER[targetRef.current.side]];
-            if (visible(shoulder)) {
-              const tx = (shoulder.x + targetRef.current.rel.x * effectiveShoulderWidth) * width;
-              const ty = (shoulder.y + targetRef.current.rel.y * effectiveShoulderWidth) * height;
-              const remainingFrac = Math.max(0, (targetRef.current.timeoutAt - now) / TARGET_TIMEOUT_MS);
-              ctx.beginPath();
-              ctx.arc(tx, ty, 26, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(220,38,38,0.25)";
-              ctx.fill();
-              ctx.lineWidth = 3;
-              ctx.strokeStyle = "#dc2626";
-              ctx.stroke();
-              ctx.beginPath();
-              ctx.arc(tx, ty, 26, -Math.PI / 2, -Math.PI / 2 + remainingFrac * Math.PI * 2);
-              ctx.strokeStyle = "#f5f5f5";
-              ctx.stroke();
-              ctx.fillStyle = "#f5f5f5";
-              ctx.font = "600 11px sans-serif";
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-              ctx.fillText(c(targetRef.current.side, lang), tx, ty);
-            }
+          if (targetRef.current) {
+            const { screenX: tx, screenY: ty, screenRadius: radius } = targetRef.current;
+            const remainingFrac = Math.max(0, (targetRef.current.timeoutAt - now) / TARGET_TIMEOUT_MS);
+            ctx.save();
+            ctx.translate(width, 0);
+            ctx.scale(-1, 1);
+            ctx.beginPath();
+            ctx.arc(tx, ty, radius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(220,38,38,0.25)";
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#dc2626";
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(tx, ty, radius, -Math.PI / 2, -Math.PI / 2 + remainingFrac * Math.PI * 2);
+            ctx.strokeStyle = "#f5f5f5";
+            ctx.stroke();
+            ctx.restore();
+
+            // Drawn as a separate, un-mirrored pass at the manually
+            // flipped x-coordinate (width - tx) — text drawn inside the
+            // mirror transform above would render backwards/unreadable.
+            ctx.fillStyle = "#fff";
+            ctx.font = "800 20px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(0,0,0,0.6)";
+            ctx.strokeText(c(targetRef.current.side, lang), width - tx, ty);
+            ctx.fillText(c(targetRef.current.side, lang), width - tx, ty);
           }
         }
 
