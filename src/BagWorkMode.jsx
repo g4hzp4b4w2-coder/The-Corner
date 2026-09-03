@@ -280,9 +280,23 @@ export default function BagWorkMode({ lang, onBack, onSaveLiveSession, userId })
       const ctx = canvas.getContext("2d");
       const loop = () => {
         if (!streamRef.current) return;
+        // Draw the true (unmirrored) frame first and detect pose on THAT —
+        // MediaPipe's left/right landmark labeling is trained on normal
+        // camera orientation, so detecting on an already-mirrored image
+        // risks scrambling exactly the left/right distinction the arm
+        // tracker depends on. Only after detection do we redraw the frame
+        // mirrored for display (like a mirror/selfie view, so moving your
+        // right hand visibly moves right on screen) — cheap to draw twice,
+        // and keeps detection correctness completely separate from display.
         ctx.drawImage(video, 0, 0, width, height);
         const people = poseSessionRef.current ? poseSessionRef.current.detectAll(canvas) : [];
+
+        ctx.save();
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, width, height);
         drawSkeletons(canvas, people);
+        ctx.restore();
 
         const now = performance.now();
         const currentPhase = phaseRef.current;

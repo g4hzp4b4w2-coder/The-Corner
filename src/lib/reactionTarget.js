@@ -37,6 +37,15 @@ export function pickTarget(lastKey) {
 export const HIT_RADIUS = 0.35;
 // How long a target stays live before it's marked missed and replaced.
 export const TARGET_TIMEOUT_MS = 1500;
+// A hand casually drifted into the target zone (no punch thrown at all)
+// must not count — the arm has to have actually been moving. This is
+// checked against the PEAK speed over a short trailing window (see
+// reactionTracker.js), not the instantaneous speed the exact frame the
+// wrist enters the zone, since a real punch is already decelerating by
+// the time it arrives. Well below a real punch's speed, well above idle
+// hand tremor/jitter; untested against real use like every other
+// threshold here.
+export const MIN_HIT_SPEED = 0.5;
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -44,11 +53,12 @@ function dist(a, b) {
 
 // Pure decision for one frame: given the live target, the tracked point's
 // current relWrist-space position (or null if not confidently tracked
-// this frame), and the current time, decide whether this frame is a hit,
-// a timeout-miss, or neither yet. Kept separate from the render/game loop
-// so it can be tested against synthetic sequences without a browser.
-export function checkTarget(target, rel, now) {
-  if (rel && dist(rel, target.rel) < HIT_RADIUS) return "hit";
+// this frame), its recent peak speed, and the current time, decide
+// whether this frame is a hit, a timeout-miss, or neither yet. Kept
+// separate from the render/game loop so it can be tested against
+// synthetic sequences without a browser.
+export function checkTarget(target, rel, recentPeakSpeed, now) {
+  if (rel && recentPeakSpeed >= MIN_HIT_SPEED && dist(rel, target.rel) < HIT_RADIUS) return "hit";
   if (now > target.timeoutAt) return "miss";
   return null;
 }
