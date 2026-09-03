@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import ShadowBoxingMode from "./ShadowBoxingMode";
 import BagWorkMode from "./BagWorkMode";
+import PadWorkMode from "./PadWorkMode";
 
 const MODES = [
   {
@@ -18,7 +19,7 @@ const MODES = [
   },
   {
     key: "pad",
-    enabled: false,
+    enabled: true,
     label: { tr: "Sanal Pad Work", en: "Virtual Pad Work" },
     desc: { tr: "Ekranda çıkan hedeflere tepki hızını ölç.", en: "React to targets shown on screen and measure your speed." },
   },
@@ -48,6 +49,10 @@ export default function LiveTrainingTab({ lang, userId, onSaveLiveSession }) {
 
   if (mode === "bag") {
     return <BagWorkMode lang={lang} userId={userId} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
+  }
+
+  if (mode === "pad") {
+    return <PadWorkMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
   }
 
   return (
