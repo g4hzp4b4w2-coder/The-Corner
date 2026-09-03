@@ -309,10 +309,14 @@ export async function addPunchSamples(userId, samples) {
 export async function getPunchSampleSummary(userId) {
   const { data, error } = await supabase
     .from("punch_training_samples")
-    .select("side, speed")
+    .select("side, speed, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(500);
   if (error) throw error;
-  return data || [];
+  return (data || []).map((row) => ({
+    side: row.side,
+    speed: row.speed,
+    createdAt: new Date(row.created_at).getTime(),
+  }));
 }

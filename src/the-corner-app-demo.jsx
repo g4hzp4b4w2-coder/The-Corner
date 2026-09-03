@@ -25,7 +25,9 @@ import {
   toggleLike as toggleLikeDb,
   getChatMessages,
   resetChatMessages,
+  getPunchSampleSummary,
 } from "./lib/db";
+import { summarizeBalance, computeWeeklySpeedTrend, hasPowerIncrease } from "./lib/punchStats";
 import { getWeeklyPlan } from "./lib/coach";
 import { getMatchNews } from "./lib/matchNews";
 import AuthScreen, { ResetPasswordForm } from "./AuthScreen";
@@ -159,6 +161,11 @@ const translations = {
   strengthsLabel: { tr: "Güçlü yanların", en: "Your strengths" },
   weaknessesLabel: { tr: "Geliştirmen gerekenler", en: "Areas to improve" },
   skillDistributionLabel: { tr: "Yetenek dağılımı", en: "Skill distribution" },
+  powerTrendLabel: { tr: "Yumruk hızı trendi", en: "Punch speed trend" },
+  powerTrendNote: {
+    tr: "Torba çalışmasında mikrofonla onaylanan darbelerden, haftalık ortalama.",
+    en: "Weekly average from bag-work hits confirmed by the microphone.",
+  },
   baselineNote: { tr: "İlk değerlendirmene dayanıyor", en: "Based on your initial self-assessment" },
   badgesLabel: { tr: "Rozetler", en: "Badges" },
   categoryLevelLabel: { tr: "Kategori bazlı seviye", en: "Level by category" },
@@ -1831,9 +1838,16 @@ const badgeList = [
     icon: Video,
     check: (entries) => entries.some((e) => e.hasVideo),
   },
+  {
+    id: "power",
+    label: { tr: "Güç artışı", en: "Power increase" },
+    shareText: { tr: "💪 Yumruk hızım bu ay arttı!", en: "💪 My punch speed went up this month!" },
+    icon: TrendingUp,
+    check: (entries, extra) => !!extra?.powerIncrease,
+  },
 ];
 
-function BadgeGrid({ entries, lang, onShare }) {
+function BadgeGrid({ entries, lang, onShare, extra }) {
   const [sharedIds, setSharedIds] = useState(() => new Set());
 
   const share = (b) => {
@@ -1844,7 +1858,7 @@ function BadgeGrid({ entries, lang, onShare }) {
   return (
     <div className="grid grid-cols-2 gap-2 mb-4">
       {badgeList.map((b) => {
-        const earned = b.check(entries);
+        const earned = b.check(entries, extra);
         const Icon = earned ? b.icon : Lock;
         return (
           <div
@@ -1895,7 +1909,30 @@ function SkillBar({ skill, value }) {
   );
 }
 
-function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, onShareAchievement, loadError, lang }) {
+function PowerTrendCard({ samples, lang }) {
+  if (!samples || samples.length < 10) return null;
+  const weeklyTrend = computeWeeklySpeedTrend(samples, 6, lang);
+  if (!weeklyTrend.some((w) => w.avg != null)) return null;
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-4">
+      <p className="text-neutral-500 text-xs mb-2">{t(lang, "powerTrendLabel")}</p>
+      <div style={{ width: "100%", height: 140 }}>
+        <ResponsiveContainer>
+          <LineChart data={weeklyTrend}>
+            <CartesianGrid stroke="#262626" vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: "#737373", fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis hide domain={["dataMin - 0.2", "dataMax + 0.2"]} />
+            <Tooltip contentStyle={{ background: "#171717", border: "1px solid #404040", fontSize: 11 }} />
+            <Line type="monotone" dataKey="avg" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-neutral-600 text-[11px] mt-1">{t(lang, "powerTrendNote")}</p>
+    </div>
+  );
+}
+
+function ProfileTab({ entries, profileInfo, punchSamples, onReset, onSignOut, onSaveProfile, onShareAchievement, loadError, lang }) {
   const [editing, setEditing] = useState(false);
   const [showFighterCard, setShowFighterCard] = useState(false);
   const skillData = CATEGORY_LIST.map((skill) => ({ skill, value: profileInfo.ratings[skill] ?? 50 }));
@@ -1903,6 +1940,7 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
   const initials = computeInitials(profileInfo.displayName);
   const topSkill = skillData.slice().sort((a, b) => b.value - a.value)[0];
   const longestStreak = computeStreaks(entries).longest;
+  const powerIncrease = hasPowerIncrease(punchSamples || []);
 
   if (editing) {
     return (
@@ -2040,8 +2078,10 @@ function ProfileTab({ entries, profileInfo, onReset, onSignOut, onSaveProfile, o
         <p className="text-neutral-600 text-[11px] mt-1">{t(lang, "baselineNote")}</p>
       </div>
 
+      <PowerTrendCard samples={punchSamples} lang={lang} />
+
       <p className="text-neutral-500 text-xs mb-2">{t(lang, "badgesLabel")}</p>
-      <BadgeGrid entries={entries} lang={lang} onShare={onShareAchievement} />
+      <BadgeGrid entries={entries} lang={lang} onShare={onShareAchievement} extra={{ powerIncrease }} />
 
       <WeeklyArchive entries={entries} lang={lang} />
 
@@ -2922,6 +2962,7 @@ export default function TheCornerApp() {
   const [lang, setLang] = useState("tr");
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [viewProfileUserId, setViewProfileUserId] = useState(null);
+  const [punchSamples, setPunchSamples] = useState([]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -2946,15 +2987,17 @@ export default function TheCornerApp() {
     setLoadError(false);
     (async () => {
       try {
-        const [profile, journalEntries, communityPosts] = await Promise.all([
+        const [profile, journalEntries, communityPosts, samples] = await Promise.all([
           getProfile(session.user.id),
           getJournalEntries(session.user.id),
           getCommunityPosts(session.user.id),
+          getPunchSampleSummary(session.user.id).catch(() => []),
         ]);
         if (cancelled) return;
-        setProfileInfo(profile);
+        setProfileInfo(profile ? { ...profile, punchBalance: summarizeBalance(samples) } : profile);
         setEntries(journalEntries);
         setPosts(communityPosts);
+        setPunchSamples(samples);
         if (profile?.lang) setLang(profile.lang);
       } catch (e) {
         // A transient failure here (flaky connection on app open, etc.) must
@@ -3239,6 +3282,7 @@ export default function TheCornerApp() {
         <ProfileTab
           entries={entries}
           profileInfo={profileInfo}
+          punchSamples={punchSamples}
           onReset={resetData}
           onSignOut={signOut}
           onSaveProfile={completeOnboarding}
