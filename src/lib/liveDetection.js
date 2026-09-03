@@ -34,6 +34,7 @@
 //        of a number fixed before the round even started.
 
 import { NOSE, WRIST, relWrist, shoulderWidthOf, visible, dist } from "./poseMath";
+import { createOneEuroFilter2D } from "./oneEuroFilter";
 
 // Used for the first few punches of a session, before there's enough
 // history to adapt to — deliberately generous, since missing early
@@ -66,13 +67,21 @@ const MIN_SHOULDER_WIDTH_RATIO = 0.75;
 // kind of quantity that turns tiny landmark jitter into huge numbers: even
 // a sub-pixel wobble in the pose model's output, divided by a ~33ms frame
 // time, can look like a fast "punch". Smoothing the wrist position itself
-// (not the resulting speed) with a light exponential moving average damps
-// that single-frame noise while barely lagging a real punch, whose speed
-// stays elevated across many consecutive frames rather than one blip.
-// Simulated against synthetic stationary jitter up to realistic camera/
-// model noise levels, this eliminates false triggers entirely while still
-// catching 19/20 real thrown punches, including fast combinations.
-const SMOOTH_ALPHA = 0.25;
+// (not the resulting speed) damps that single-frame noise before it ever
+// reaches the speed calculation. A fixed-alpha exponential moving average
+// (the original fix here) has to pick one tradeoff point between jitter
+// suppression and lag — simulated against synthetic stationary jitter up
+// to realistic camera/model noise levels, it eliminated false triggers
+// entirely while still catching 19/20 real thrown punches, but it can't
+// tell "standing still" from "mid-punch" and so damps both the same way.
+// The One-Euro filter (oneEuroFilter.js) adapts: aggressive smoothing
+// while the wrist is roughly still, relaxing as its speed rises, so a
+// real punch's peak is blunted less than jitter is. WRIST_MIN_CUTOFF/BETA
+// were picked so its steady-state (low-speed) jitter suppression matches
+// the old alpha=0.25 EMA at a typical ~30fps frame time — same or better
+// jitter safety, with less lag added to fast strikes.
+const WRIST_MIN_CUTOFF = 1.5;
+const WRIST_BETA = 0.7;
 
 // How long a candidate peak has to hold without being beaten before it's
 // confirmed as real and evaluated — adds this much latency to when a
@@ -137,7 +146,7 @@ function initArmState() {
   return {
     prevRel: null,
     prevT: null,
-    smoothRel: null,
+    smooth: createOneEuroFilter2D({ minCutoff: WRIST_MIN_CUTOFF, beta: WRIST_BETA }),
     resolved: true,
     curMin: 0,
     curMax: 0,
@@ -217,15 +226,7 @@ export function createPunchDetector(seed = {}) {
       const arm = arms[side];
       const rawRel = relWrist(landmarks, side, effectiveShoulderWidth);
       if (!rawRel) continue;
-      if (!arm.smoothRel) {
-        arm.smoothRel = { ...rawRel };
-      } else {
-        arm.smoothRel = {
-          x: SMOOTH_ALPHA * rawRel.x + (1 - SMOOTH_ALPHA) * arm.smoothRel.x,
-          y: SMOOTH_ALPHA * rawRel.y + (1 - SMOOTH_ALPHA) * arm.smoothRel.y,
-        };
-      }
-      const rel = arm.smoothRel;
+      const rel = arm.smooth(rawRel, t);
 
       if (arm.prevRel && arm.prevT != null) {
         const dt = (t - arm.prevT) / 1000;
