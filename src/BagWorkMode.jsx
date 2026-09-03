@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, X, Minus, Plus } from "lucide-react";
+import { ChevronLeft, X, Minus, Plus, Volume2 } from "lucide-react";
 import { createPoseSession, drawSkeletons } from "./lib/poseAnalysis";
-import { createPunchDetector } from "./lib/liveDetection";
+import { createArmTracker } from "./lib/armTracker";
+import { createImpactDetector, rmsOf } from "./lib/audioImpact";
+import { addPunchSamples } from "./lib/db";
 import { playGong } from "./lib/gongSound";
-import { getPunchSampleSummary } from "./lib/db";
-import { summarizeSeed } from "./lib/armTracker";
-
-const STYLE_LABEL = {
-  straight: { tr: "Düz", en: "Straight" },
-  hook: { tr: "Hook", en: "Hook" },
-  uppercut: { tr: "Uppercut", en: "Uppercut" },
-};
-const SIDE_LABEL = {
-  left: { tr: "Sol kol", en: "Left arm" },
-  right: { tr: "Sağ kol", en: "Right arm" },
-};
 
 const ROUND_DURATIONS = [60, 120, 180];
 const PREP_MS = 5000;
@@ -28,42 +18,29 @@ const COPY = {
   roundDurationLabel: { tr: "Raund süresi", en: "Round duration" },
   minuteShort: { tr: "dk", en: "min" },
   startLabel: { tr: "Başla", en: "Start" },
-  prepLabel: { tr: "Hazırlan, kamerayı yerleştir", en: "Get ready, set up the camera" },
+  prepLabel: { tr: "Hazırlan, mikrofon torbaya yakın olsun", en: "Get ready, keep the mic close to the bag" },
   roundLabel: { tr: "Raund", en: "Round" },
   permissionDenied: {
-    tr: "Kamera izni verilmedi. Tarayıcı ayarlarından bu site için kameraya izin ver.",
-    en: "Camera permission was denied. Allow camera access for this site in your browser settings.",
+    tr: "Kamera/mikrofon izni verilmedi. Tarayıcı ayarlarından bu site için izin ver.",
+    en: "Camera/microphone permission was denied. Allow access for this site in your browser settings.",
   },
-  noCamera: { tr: "Kamera bulunamadı.", en: "No camera found." },
-  genericError: { tr: "Kamera başlatılamadı, tekrar dene.", en: "Couldn't start the camera, try again." },
-  totalPunches: { tr: "Toplam yumruk", en: "Total punches" },
-  guardDropsLabel: { tr: "Guard düşüşü", en: "Guard drops" },
-  guardWarning: { tr: "Guard açık!", en: "Guard's down!" },
-  recentLabel: { tr: "Son hareketler", en: "Recent moves" },
-  guardDropEvent: { tr: "guard düştü", en: "guard dropped" },
+  noCamera: { tr: "Kamera veya mikrofon bulunamadı.", en: "No camera or microphone found." },
+  genericError: { tr: "Başlatılamadı, tekrar dene.", en: "Couldn't start, try again." },
+  totalHits: { tr: "Toplam darbe", en: "Total hits" },
+  listeningLabel: { tr: "Dinleniyor", en: "Listening" },
   roundSummaryTitle: { tr: "Raund özeti", en: "Round summary" },
   nextRoundLabel: { tr: "Sonraki raund", en: "Next round" },
   finishTrainingLabel: { tr: "Antrenmanı bitir", en: "Finish training" },
   sessionSummaryTitle: { tr: "Antrenman özeti", en: "Training summary" },
   newTrainingLabel: { tr: "Yeni antrenman", en: "New training" },
   perRoundLabel: { tr: "Raund", en: "Round" },
-  confidenceHigh: { tr: "Yüksek güven", en: "High confidence" },
-  confidenceMedium: { tr: "Orta güven", en: "Medium confidence" },
-  confidenceLow: { tr: "Düşük güven", en: "Low confidence" },
-  confidenceHint: {
-    tr: "Kameraya daha dönük dur, sayım daha güvenilir olur.",
-    en: "Face the camera more directly for a more reliable count.",
-  },
   correctCountLabel: { tr: "Bu sayı yanlış mıydı? Düzelt", en: "Was this count wrong? Fix it" },
   correctCountPlaceholder: { tr: "Gerçek sayı", en: "Actual count" },
   saveCorrectionLabel: { tr: "Kaydet", en: "Save" },
   correctedLabel: { tr: "Düzeltildi", en: "Corrected" },
-  aiCountLabel: { tr: "AI sayımı", en: "AI count" },
+  aiCountLabel: { tr: "Sayaç", en: "Counter" },
   noteLabel: { tr: "Not (opsiyonel)", en: "Note (optional)" },
-  notePlaceholder: {
-    tr: "Bu antrenman hakkında not ekle...",
-    en: "Add a note about this session...",
-  },
+  notePlaceholder: { tr: "Bu antrenman hakkında not ekle...", en: "Add a note about this session..." },
   saveToJournalLabel: { tr: "Günlüğe kaydet", en: "Save to journal" },
   savingToJournalLabel: { tr: "Kaydediliyor...", en: "Saving..." },
   savedToJournalLabel: { tr: "Günlüğe kaydedildi", en: "Saved to journal" },
@@ -78,65 +55,21 @@ function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
 }
 
-const emptyRoundStats = { left: 0, right: 0, straight: 0, hook: 0, uppercut: 0, guardDrops: 0 };
-
 function formatClock(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function sumStats(list) {
-  return list.reduce(
-    (acc, r) => ({
-      left: acc.left + r.left,
-      right: acc.right + r.right,
-      straight: acc.straight + r.straight,
-      hook: acc.hook + r.hook,
-      uppercut: acc.uppercut + r.uppercut,
-      guardDrops: acc.guardDrops + r.guardDrops,
-    }),
-    { ...emptyRoundStats }
-  );
-}
-
-// The single biggest known driver of count accuracy is camera framing
-// (turning bladed relative to the camera shrinks the shoulder-width scale
-// the whole detector normalizes by). Rather than present every count as
-// equally trustworthy, turn that one signal into an honest confidence
-// level instead of silently miscounting.
-function confidenceLevel(diagnostics) {
-  if (!diagnostics) return "high";
-  if (diagnostics.minShoulderWidthRatio >= 0.72) return "high";
-  if (diagnostics.minShoulderWidthRatio >= 0.5) return "medium";
-  return "low";
-}
-
-function ConfidenceBadge({ level, lang }) {
-  const styles = {
-    high: "bg-emerald-950 border-emerald-900 text-emerald-400",
-    medium: "bg-amber-950 border-amber-900 text-amber-400",
-    low: "bg-red-950 border-red-900 text-red-400",
-  };
-  const labelKey = { high: "confidenceHigh", medium: "confidenceMedium", low: "confidenceLow" }[level];
-  return (
-    <div className={`flex flex-col gap-0.5 border rounded-lg px-2.5 py-2 ${styles[level] || styles.high}`}>
-      <span className="text-xs font-medium">{c(labelKey, lang)}</span>
-      {level !== "high" && <span className="text-[11px] opacity-80">{c("confidenceHint", lang)}</span>}
-    </div>
-  );
-}
-
 function CountCorrection({ round, roundIndex, onCorrect, lang }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
-  const aiTotal = round.left + round.right;
 
   if (round.correctedTotal != null) {
     return (
       <p className="text-neutral-500 text-[11px]">
         {c("correctedLabel", lang)}: <span className="text-neutral-200 font-medium">{round.correctedTotal}</span>{" "}
-        ({c("aiCountLabel", lang)}: {aiTotal})
+        ({c("aiCountLabel", lang)}: {round.hits})
       </p>
     );
   }
@@ -146,7 +79,7 @@ function CountCorrection({ round, roundIndex, onCorrect, lang }) {
       <button
         onClick={() => {
           setEditing(true);
-          setValue(String(aiTotal));
+          setValue(String(round.hits));
         }}
         className="text-neutral-500 hover:text-neutral-300 text-[11px] text-left underline decoration-dotted transition-colors"
       >
@@ -181,56 +114,31 @@ function CountCorrection({ round, roundIndex, onCorrect, lang }) {
   );
 }
 
-function buildSessionBlocks(roundsHistory, lang) {
-  return roundsHistory.map((r, i) => {
-    const total = r.correctedTotal ?? r.left + r.right;
-    const roundLabel = `${c("perRoundLabel", lang)} ${i + 1}`;
-    if (lang === "en") {
-      return `${roundLabel}: ${total} punches (${r.left} left, ${r.right} right) · ${r.guardDrops} guard drops`;
-    }
-    return `${roundLabel}: ${total} yumruk (${r.left} sol, ${r.right} sağ) · ${r.guardDrops} guard düşüşü`;
-  });
-}
-
-function StatsGrid({ stats, lang }) {
-  const total = stats.left + stats.right;
+function HitsCard({ hits, lang }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-center">
-          <p className="text-neutral-500 text-[10px] mb-0.5">{SIDE_LABEL.left[lang] || SIDE_LABEL.left.tr}</p>
-          <p className="text-neutral-100 text-lg font-medium">{stats.left}</p>
-        </div>
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-center">
-          <p className="text-neutral-500 text-[10px] mb-0.5">{SIDE_LABEL.right[lang] || SIDE_LABEL.right.tr}</p>
-          <p className="text-neutral-100 text-lg font-medium">{stats.right}</p>
-        </div>
-      </div>
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 flex items-center justify-between">
-        <span className="text-neutral-500 text-xs">{c("totalPunches", lang)}</span>
-        <span className="text-red-500 text-base font-medium">{total}</span>
-      </div>
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 flex items-center justify-between">
-        <span className="text-neutral-500 text-xs">{c("guardDropsLabel", lang)}</span>
-        <span className="text-neutral-200 text-base font-medium">{stats.guardDrops}</span>
-      </div>
+    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 flex items-center justify-between">
+      <span className="text-neutral-500 text-xs">{c("totalHits", lang)}</span>
+      <span className="text-red-500 text-xl font-medium">{hits}</span>
     </div>
   );
 }
 
-export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, userId }) {
+export default function BagWorkMode({ lang, onBack, onSaveLiveSession, userId }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const poseSessionRef = useRef(null);
-  const detectorRef = useRef(null);
+  const armTrackerRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
+  const impactDetectorRef = useRef(null);
+  const audioBufRef = useRef(null);
   const rafRef = useRef(null);
-  const guardWarnTimeoutRef = useRef(null);
   const phaseRef = useRef("setup");
   const phaseEndRef = useRef(0);
   const lastCountdownRef = useRef(-1);
-  const roundStatsRef = useRef({ ...emptyRoundStats });
-  const seedRef = useRef({});
+  const hitCountRef = useRef(0);
+  const sessionSamplesRef = useRef([]);
 
   // setup | prep | round | roundEnd | sessionEnd
   const [phase, setPhase] = useState("setup");
@@ -238,9 +146,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
   const [roundDuration, setRoundDuration] = useState(180);
   const [currentRound, setCurrentRound] = useState(1);
   const [roundsHistory, setRoundsHistory] = useState([]);
-  const [roundStats, setRoundStats] = useState({ ...emptyRoundStats });
-  const [events, setEvents] = useState([]);
-  const [guardWarning, setGuardWarning] = useState(false);
+  const [hitCount, setHitCount] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -250,50 +156,18 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
   const teardownCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
-    if (guardWarnTimeoutRef.current) clearTimeout(guardWarnTimeoutRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     poseSessionRef.current?.close();
     poseSessionRef.current = null;
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    analyserRef.current = null;
   };
 
   useEffect(() => teardownCamera, []);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    getPunchSampleSummary(userId)
-      .then((samples) => {
-        if (!cancelled) seedRef.current = summarizeSeed(samples);
-      })
-      .catch(() => {
-        // No seed data is exactly today's behavior — never let this block training.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  const handleEvents = (newEvents) => {
-    if (newEvents.length === 0) return;
-    const next = { ...roundStatsRef.current };
-    for (const ev of newEvents) {
-      if (ev.type === "punch") {
-        next[ev.side] += 1;
-        next[ev.style] += 1;
-      } else if (ev.type === "guardDrop") {
-        next.guardDrops += 1;
-      }
-    }
-    roundStatsRef.current = next;
-    setRoundStats(next);
-    setEvents((prev) => [...newEvents, ...prev].slice(0, 6));
-    if (newEvents.some((ev) => ev.type === "guardDrop")) {
-      setGuardWarning(true);
-      if (guardWarnTimeoutRef.current) clearTimeout(guardWarnTimeoutRef.current);
-      guardWarnTimeoutRef.current = setTimeout(() => setGuardWarning(false), 1200);
-    }
-  };
 
   const beginPrep = () => {
     phaseEndRef.current = performance.now() + PREP_MS;
@@ -304,11 +178,10 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
   };
 
   const beginRound = (roundNumber) => {
-    detectorRef.current = createPunchDetector(seedRef.current);
-    roundStatsRef.current = { ...emptyRoundStats };
-    setRoundStats({ ...emptyRoundStats });
-    setEvents([]);
-    setGuardWarning(false);
+    impactDetectorRef.current = createImpactDetector();
+    armTrackerRef.current = createArmTracker();
+    hitCountRef.current = 0;
+    setHitCount(0);
     setCurrentRound(roundNumber);
     phaseEndRef.current = performance.now() + roundDuration * 1000;
     lastCountdownRef.current = -1;
@@ -320,9 +193,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
 
   const endRound = () => {
     playGong();
-    const diagnostics = detectorRef.current?.getDiagnostics?.();
-    const confidence = confidenceLevel(diagnostics);
-    setRoundsHistory((prev) => [...prev, { ...roundStatsRef.current, confidence, correctedTotal: null }]);
+    setRoundsHistory((prev) => [...prev, { hits: hitCountRef.current, correctedTotal: null }]);
     phaseRef.current = "roundEnd";
     setPhase("roundEnd");
   };
@@ -338,12 +209,18 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
     setNote("");
     setSaveStatus("idle");
     setCompetes(true);
+    sessionSamplesRef.current = [];
   };
 
   const finishTraining = () => {
     teardownCamera();
     phaseRef.current = "sessionEnd";
     setPhase("sessionEnd");
+    if (userId && sessionSamplesRef.current.length > 0) {
+      addPunchSamples(userId, sessionSamplesRef.current).catch(() => {
+        // Best-effort background data collection — never worth surfacing an error for.
+      });
+    }
   };
 
   const handleSaveToJournal = async () => {
@@ -352,10 +229,13 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
     const totalSeconds = roundsHistory.length * roundDuration;
     const minutes = Math.max(1, Math.round(totalSeconds / 60));
     const duration = lang === "en" ? `${minutes} min` : `${minutes} dk`;
-    const blocks = buildSessionBlocks(roundsHistory, lang);
-    const threeMinRounds = roundDuration === 180 ? roundsHistory.length : 0;
+    const blocks = roundsHistory.map((r, i) => {
+      const total = r.correctedTotal ?? r.hits;
+      const roundLabel = `${c("perRoundLabel", lang)} ${i + 1}`;
+      return lang === "en" ? `${roundLabel}: ${total} hits` : `${roundLabel}: ${total} darbe`;
+    });
     try {
-      await onSaveLiveSession({ note, blocks, duration, threeMinRounds, competes });
+      await onSaveLiveSession({ note, blocks, duration, threeMinRounds: 0, competes, type: "Kum Torbası" });
       setSaveStatus("saved");
     } catch {
       setSaveStatus("idle");
@@ -365,8 +245,9 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
   const startTraining = async () => {
     setError("");
     setRoundsHistory([]);
+    sessionSamplesRef.current = [];
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
       streamRef.current = stream;
       const video = videoRef.current;
       video.srcObject = stream;
@@ -380,6 +261,18 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
       const canvas = canvasRef.current;
       canvas.width = width;
       canvas.height = height;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioCtxRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      // Deliberately not connected to audioCtx.destination — we only read
+      // from it, never play the mic back out (that would be feedback).
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      audioBufRef.current = new Uint8Array(analyser.frequencyBinCount);
 
       poseSessionRef.current = await createPoseSession();
       beginPrep();
@@ -395,6 +288,8 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
         const currentPhase = phaseRef.current;
         const timedPhase = currentPhase === "prep" || currentPhase === "round";
 
+        if (armTrackerRef.current) armTrackerRef.current.update(people[0] || null, now);
+
         if (timedPhase) {
           const remainingMs = phaseEndRef.current - now;
           if (remainingMs > 0) {
@@ -403,9 +298,16 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
               lastCountdownRef.current = remainingSec;
               setCountdown(remainingSec);
             }
-            if (currentPhase === "round") {
-              const newEvents = detectorRef.current.update(people[0] || null, now);
-              handleEvents(newEvents);
+            if (currentPhase === "round" && analyserRef.current) {
+              analyserRef.current.getByteTimeDomainData(audioBufRef.current);
+              const rms = rmsOf(audioBufRef.current);
+              const isHit = impactDetectorRef.current.update(rms, now);
+              if (isHit) {
+                hitCountRef.current += 1;
+                setHitCount(hitCountRef.current);
+                const snap = armTrackerRef.current?.snapshotAtImpact();
+                if (snap) sessionSamplesRef.current.push({ ...snap, source: "bag" });
+              }
             }
           } else if (currentPhase === "prep") {
             beginRound(1);
@@ -427,14 +329,10 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
 
   const cameraPhases = phase === "prep" || phase === "round" || phase === "roundEnd";
   const lastRound = roundsHistory[roundsHistory.length - 1];
-  const totals = sumStats(roundsHistory);
+  const totalHits = roundsHistory.reduce((sum, r) => sum + (r.correctedTotal ?? r.hits), 0);
 
   return (
     <div className="flex flex-col" style={{ minHeight: 420 }}>
-      {/* Rendered once, unconditionally, so it never unmounts mid-session —
-          a phase-gated <video> would remount on every phase change and risk
-          the live stream freezing on browsers that pause detached media
-          elements. */}
       <video ref={videoRef} playsInline muted className="hidden" />
 
       <div className="flex items-center gap-2 mb-3">
@@ -495,10 +393,6 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
         </div>
       )}
 
-      {/* Also rendered unconditionally (display toggled via CSS) for the
-          same reason as the video above — startTraining() needs canvasRef
-          to already point at a mounted element the moment the user taps
-          "Başla", while we're still in the "setup" phase. */}
       <div
         className="relative bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden mb-3"
         style={{ display: cameraPhases ? "block" : "none", minHeight: 240 }}
@@ -514,43 +408,31 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
         </button>
 
         {phase === "round" && (
-          <div className="absolute top-2 left-2 bg-neutral-950/70 rounded-lg px-2.5 py-1">
+          <div className="absolute top-2 left-2 bg-neutral-950/70 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
             <span className="text-neutral-100 text-xs font-medium tabular-nums">
               {c("roundLabel", lang)} {currentRound}/{roundCount} · {formatClock(countdown)}
             </span>
           </div>
         )}
 
-        {phase === "prep" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
-            <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
-            <span className="text-neutral-400 text-xs">{c("prepLabel", lang)}</span>
+        {phase === "round" && (
+          <div className="absolute bottom-2 left-2 bg-neutral-950/70 rounded-lg px-2 py-1 flex items-center gap-1">
+            <Volume2 size={11} className="text-emerald-500" />
+            <span className="text-neutral-300 text-[10px]">{c("listeningLabel", lang)}</span>
           </div>
         )}
 
-        {guardWarning && phase === "round" && (
-          <div className="absolute inset-x-0 bottom-0 bg-red-600 text-neutral-950 text-xs font-medium text-center py-1.5">
-            {c("guardWarning", lang)}
+        {phase === "prep" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950/60">
+            <span className="text-neutral-100 text-4xl font-medium tabular-nums">{countdown}</span>
+            <span className="text-neutral-400 text-xs text-center px-6">{c("prepLabel", lang)}</span>
           </div>
         )}
       </div>
 
       {phase === "round" && (
         <div className="flex flex-col gap-2.5 mb-3">
-          <StatsGrid stats={roundStats} lang={lang} />
-          {events.length > 0 && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5">
-              <p className="text-neutral-500 text-[10px] mb-1.5">{c("recentLabel", lang)}</p>
-              <div className="flex flex-col gap-1">
-                {events.map((ev, i) => (
-                  <p key={i} className="text-neutral-300 text-xs">
-                    {SIDE_LABEL[ev.side][lang] || SIDE_LABEL[ev.side].tr}
-                    {ev.type === "punch" ? ` · ${STYLE_LABEL[ev.style][lang] || STYLE_LABEL[ev.style].tr}` : ` · ${c("guardDropEvent", lang)}`}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
+          <HitsCard hits={hitCount} lang={lang} />
         </div>
       )}
 
@@ -559,8 +441,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
           <p className="text-neutral-300 text-sm font-medium">
             {c("roundSummaryTitle", lang)} · {c("perRoundLabel", lang)} {currentRound}
           </p>
-          <StatsGrid stats={lastRound} lang={lang} />
-          <ConfidenceBadge level={lastRound.confidence} lang={lang} />
+          <HitsCard hits={lastRound.hits} lang={lang} />
           <CountCorrection round={lastRound} roundIndex={roundsHistory.length - 1} onCorrect={applyCorrection} lang={lang} />
           {currentRound < roundCount ? (
             <button
@@ -583,7 +464,7 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
       {phase === "sessionEnd" && (
         <div className="flex flex-col gap-3">
           <p className="text-neutral-300 text-sm font-medium">{c("sessionSummaryTitle", lang)}</p>
-          <StatsGrid stats={totals} lang={lang} />
+          <HitsCard hits={totalHits} lang={lang} />
 
           <div className="flex flex-col gap-1.5">
             {roundsHistory.map((r, i) => (
@@ -592,9 +473,8 @@ export default function ShadowBoxingMode({ lang, onBack, onSaveLiveSession, user
                   {c("perRoundLabel", lang)} {i + 1}
                 </span>
                 <span className="text-neutral-300 text-xs">
-                  {r.correctedTotal ?? r.left + r.right} {lang === "en" ? "punches" : "yumruk"}
-                  {r.correctedTotal != null ? ` (${c("correctedLabel", lang).toLowerCase()})` : ""} · {r.guardDrops}{" "}
-                  {c("guardDropsLabel", lang).toLowerCase()}
+                  {r.correctedTotal ?? r.hits} {lang === "en" ? "hits" : "darbe"}
+                  {r.correctedTotal != null ? ` (${c("correctedLabel", lang).toLowerCase()})` : ""}
                 </span>
               </div>
             ))}

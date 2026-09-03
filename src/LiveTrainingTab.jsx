@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import ShadowBoxingMode from "./ShadowBoxingMode";
+import BagWorkMode from "./BagWorkMode";
 
 const MODES = [
   {
@@ -8,6 +9,12 @@ const MODES = [
     enabled: true,
     label: { tr: "Gölge Boksu", en: "Shadowboxing" },
     desc: { tr: "Raund raund yumruk sayısı ve guard takibi.", en: "Round-by-round punch count and guard tracking." },
+  },
+  {
+    key: "bag",
+    enabled: true,
+    label: { tr: "Kum Torbası", en: "Heavy Bag" },
+    desc: { tr: "Torbaya inen darbeleri sesle sayar.", en: "Counts bag hits by sound." },
   },
   {
     key: "pad",
@@ -32,11 +39,15 @@ function c(key, lang) {
   return COPY[key][lang] || COPY[key].tr;
 }
 
-export default function LiveTrainingTab({ lang, onSaveLiveSession }) {
+export default function LiveTrainingTab({ lang, userId, onSaveLiveSession }) {
   const [mode, setMode] = useState(null);
 
   if (mode === "shadow") {
-    return <ShadowBoxingMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
+    return <ShadowBoxingMode lang={lang} userId={userId} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
+  }
+
+  if (mode === "bag") {
+    return <BagWorkMode lang={lang} userId={userId} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
   }
 
   return (
