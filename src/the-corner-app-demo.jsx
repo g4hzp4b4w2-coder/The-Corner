@@ -829,7 +829,7 @@ function CoachTab({ userId, profileInfo, entries, lang, onSaveVideoAnalysis, onS
             onSentToChat={() => setSubTab("chat")}
           />
         ) : (
-          <LiveTrainingTab lang={lang} onSaveLiveSession={onSaveLiveSession} />
+          <LiveTrainingTab lang={lang} userId={userId} onSaveLiveSession={onSaveLiveSession} />
         )}
       </div>
     </div>
@@ -2991,10 +2991,10 @@ export default function TheCornerApp() {
     setEntries((prev) => [entry, ...prev]);
   };
 
-  const saveLiveSession = async ({ note, blocks, duration, threeMinRounds, competes }) => {
+  const saveLiveSession = async ({ note, blocks, duration, threeMinRounds, competes, type = "Gölge Boksu" }) => {
     const entry = await addJournalEntry(session.user.id, {
       label: t(lang, "liveTrainingSubTab"),
-      type: "Gölge Boksu",
+      type,
       categories: ["Hız", "Teknik"],
       duration,
       note,

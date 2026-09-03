@@ -162,7 +162,16 @@ function initArmState() {
 // the current single-person landmarks and a monotonically increasing
 // timestamp in ms (e.g. performance.now()); it returns any events that
 // just happened.
-export function createPunchDetector() {
+//
+// `seed` is optional: { left: medianSpeed, right: medianSpeed }, this
+// person's own median confirmed-impact speed per arm from bag-work
+// sessions (see armTracker.js / audioImpact.js — bag work gets a real
+// "a punch landed" signal from the microphone that shadowboxing never has,
+// so it's a much better-informed starting guess than BOOTSTRAP_FLOOR).
+// Only changes behavior for the first few punches of a session, before
+// there's enough of *this session's* real data to adapt from directly —
+// with no seed (or no data yet for an arm), behavior is unchanged.
+export function createPunchDetector(seed = {}) {
   const arms = { left: initArmState(), right: initArmState() };
   let shoulderWidth = 0.2;
   let maxShoulderWidth = 0;
@@ -173,8 +182,16 @@ export function createPunchDetector() {
   // presenting every count as equally trustworthy.
   let minShoulderWidthRatio = 1;
 
-  function currentThresholds(arm) {
+  function currentThresholds(arm, side) {
     if (arm.recentPeaks.length < MIN_SAMPLES_TO_ADAPT) {
+      const seedMedian = seed[side];
+      if (seedMedian > 0) {
+        const baseline = seedMedian * ADAPT_RATIO;
+        return {
+          floor: Math.max(baseline, ABSOLUTE_MIN_FLOOR),
+          prominence: Math.max(baseline, ABSOLUTE_MIN_PROMINENCE),
+        };
+      }
       return { floor: BOOTSTRAP_FLOOR, prominence: BOOTSTRAP_PROMINENCE };
     }
     const baseline = median(arm.recentPeaks) * ADAPT_RATIO;
@@ -222,7 +239,7 @@ export function createPunchDetector() {
               arm.peakRel = { ...rel };
             }
             if (t - arm.curMaxT > CONFIRM_DELAY_MS) {
-              const { floor, prominence } = currentThresholds(arm);
+              const { floor, prominence } = currentThresholds(arm, side);
               const gotProminence = arm.curMax - arm.curMin;
               if (arm.curMax > floor && gotProminence > prominence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
                 const dir = { x: arm.peakRel.x - arm.valleyRel.x, y: arm.peakRel.y - arm.valleyRel.y };
@@ -245,7 +262,7 @@ export function createPunchDetector() {
               arm.curMin = speed;
               arm.valleyRel = { ...rel };
             } else {
-              const riseMargin = Math.max(currentThresholds(arm).prominence * RISE_MARGIN_RATIO, ABSOLUTE_MIN_RISE_MARGIN);
+              const riseMargin = Math.max(currentThresholds(arm, side).prominence * RISE_MARGIN_RATIO, ABSOLUTE_MIN_RISE_MARGIN);
               if (speed > arm.curMin + riseMargin) {
                 arm.resolved = false;
                 arm.curMax = speed;

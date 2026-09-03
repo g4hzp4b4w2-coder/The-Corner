@@ -284,3 +284,35 @@ export async function resetChatMessages(userId) {
   const { error } = await supabase.from("coach_messages").delete().eq("user_id", userId);
   if (error) throw error;
 }
+
+// Compact, per-punch feature samples captured during bag work, where a
+// confirmed microphone impact gives us a real "yes, a punch landed right
+// now" label to pair with the pose data at that moment — a ground truth
+// shadowboxing's vision-only detection never has. Kept intentionally tiny
+// (a handful of numbers per punch, no raw frames) so this stays cheap to
+// store even as it accumulates across many sessions.
+export async function addPunchSamples(userId, samples) {
+  if (!samples || samples.length === 0) return;
+  const rows = samples.map((s) => ({
+    user_id: userId,
+    source: s.source,
+    side: s.side,
+    speed: s.speed,
+    dir_x: s.dirX,
+    dir_y: s.dirY,
+    shoulder_width: s.shoulderWidth,
+  }));
+  const { error } = await supabase.from("punch_training_samples").insert(rows);
+  if (error) throw error;
+}
+
+export async function getPunchSampleSummary(userId) {
+  const { data, error } = await supabase
+    .from("punch_training_samples")
+    .select("side, speed")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return data || [];
+}
