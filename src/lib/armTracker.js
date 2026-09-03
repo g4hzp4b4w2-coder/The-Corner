@@ -1,19 +1,40 @@
 // A lightweight per-arm position/speed tracker used by bag-work mode. It
 // does NOT decide "was this a punch" — the microphone does that (see
 // audioImpact.js). All this does is keep a smoothed, per-arm relative
-// wrist position and instantaneous speed/direction every frame, so that
-// the moment the mic confirms a real impact, we can snapshot which arm was
-// moving and how — a compact, cheap-to-store feature sample for later
-// analysis (and eventually, seeding the shadowboxing detector's starting
-// thresholds with this person's own known punch intensity).
+// wrist position and a short rolling history of speed/direction, so that
+// the moment the mic confirms a real impact, we can look back and
+// snapshot which arm was moving and how — a compact, cheap-to-store
+// feature sample for later analysis (and eventually, seeding the
+// shadowboxing detector's starting thresholds with this person's own
+// known punch intensity).
+//
+// Bag work is often worked at an angle or circling the bag, not squared
+// to the camera like shadowboxing tends to be — the same "bladed stance
+// shrinks the shoulder-width scale" problem documented in liveDetection.js
+// applies here too, and a fast strike can also blur/occlude the hitting
+// arm for exactly the frame we'd want it most. Rather than trust
+// whatever the single instantaneous frame says, snapshotAtImpact() looks
+// at a short trailing window per arm (real punch speed stays elevated
+// across several frames, not one blip) and refuses to return a sample at
+// all if the stance was badly bladed or the winning arm's peak wasn't
+// clearly real movement — a skipped sample for one hit is harmless, a
+// wrong one silently pollutes future calibration data.
 
 import { relWrist, shoulderWidthOf } from "./poseMath";
 
 const SMOOTH_ALPHA = 0.25; // same constant used by the vision punch detector, for a consistent feel
 const MIN_SHOULDER_WIDTH_RATIO = 0.75;
+const WINDOW_MS = 400; // covers a typical extend-to-impact stretch
+// Below this, a "peak" is more likely tracking noise than a real strike —
+// same order of magnitude as the vision detector's own absolute floors.
+const MIN_SNAPSHOT_SPEED = 0.6;
+// Below this shoulder-width ratio the stance was bladed enough at that
+// moment that normalized speed/position can't be trusted — matches the
+// "high confidence" cutoff already shown to users in ShadowBoxingMode.
+const MIN_CONFIDENT_SHOULDER_RATIO = 0.72;
 
 function initArm() {
-  return { smoothRel: null, prevRel: null, prevT: null, speed: 0, dir: { x: 0, y: 0 } };
+  return { smoothRel: null, prevRel: null, prevT: null, history: [] };
 }
 
 export function createArmTracker() {
@@ -26,6 +47,7 @@ export function createArmTracker() {
     shoulderWidth = shoulderWidthOf(landmarks, shoulderWidth);
     maxShoulderWidth = Math.max(maxShoulderWidth, shoulderWidth);
     const effectiveShoulderWidth = Math.max(shoulderWidth, maxShoulderWidth * MIN_SHOULDER_WIDTH_RATIO);
+    const shoulderRatio = maxShoulderWidth > 0 ? shoulderWidth / maxShoulderWidth : 1;
 
     for (const side of ["left", "right"]) {
       const arm = arms[side];
@@ -44,8 +66,9 @@ export function createArmTracker() {
         if (dt > 0) {
           const dx = rel.x - arm.prevRel.x;
           const dy = rel.y - arm.prevRel.y;
-          arm.speed = Math.hypot(dx, dy) / dt;
-          arm.dir = { x: dx, y: dy };
+          const speed = Math.hypot(dx, dy) / dt;
+          arm.history.push({ t, speed, dir: { x: dx, y: dy }, shoulderRatio });
+          while (arm.history.length && t - arm.history[0].t > WINDOW_MS) arm.history.shift();
         }
       }
       arm.prevRel = rel;
@@ -53,18 +76,32 @@ export function createArmTracker() {
     }
   }
 
-  // Best-guess snapshot for a confirmed impact happening right now:
-  // whichever arm is moving fastest is almost certainly the one that just
-  // landed. Returns null if neither arm has any tracked motion yet.
+  // Best-guess snapshot for a confirmed impact happening right now: looks
+  // back over each arm's last WINDOW_MS for its peak speed (not just this
+  // instant, which could be mid-blur exactly when a fast strike lands),
+  // picks whichever arm peaked higher, and returns null — no sample is
+  // better than a wrong one — unless that peak is both clearly real
+  // movement and happened while the stance was confidently square-on.
   function snapshotAtImpact() {
-    const side = arms.left.speed >= arms.right.speed ? "left" : "right";
-    const arm = arms[side];
-    if (arm.speed <= 0) return null;
+    const peaks = {};
+    for (const side of ["left", "right"]) {
+      const history = arms[side].history;
+      let best = null;
+      for (const sample of history) {
+        if (!best || sample.speed > best.speed) best = sample;
+      }
+      peaks[side] = best;
+    }
+
+    const side = (peaks.left?.speed || 0) >= (peaks.right?.speed || 0) ? "left" : "right";
+    const peak = peaks[side];
+    if (!peak || peak.speed < MIN_SNAPSHOT_SPEED || peak.shoulderRatio < MIN_CONFIDENT_SHOULDER_RATIO) return null;
+
     return {
       side,
-      speed: arm.speed,
-      dirX: arm.dir.x,
-      dirY: arm.dir.y,
+      speed: peak.speed,
+      dirX: peak.dir.x,
+      dirY: peak.dir.y,
       shoulderWidth: Math.max(shoulderWidth, maxShoulderWidth * MIN_SHOULDER_WIDTH_RATIO),
     };
   }
