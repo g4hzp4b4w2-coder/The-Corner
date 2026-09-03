@@ -16,6 +16,24 @@ export function buildPhysicalStatsLine(profile, lang) {
   return parts.join(", ");
 }
 
+// Measured (not self-reported) left/right punch-speed balance from bag
+// work's microphone-confirmed impacts — real data the coach otherwise
+// has no way to know, so it's worth flagging when it's lopsided.
+export function buildPunchBalanceLine(punchBalance, lang) {
+  if (!punchBalance) return "";
+  const { leftAvgSpeed, rightAvgSpeed } = punchBalance;
+  const bigger = Math.max(leftAvgSpeed, rightAvgSpeed);
+  const smaller = Math.min(leftAvgSpeed, rightAvgSpeed);
+  const diffPct = Math.round(((bigger - smaller) / smaller) * 100);
+  if (diffPct < 15) {
+    return lang === "en" ? "Measured punch speed: left/right arms fairly balanced" : "Ölçülen yumruk hızı: sol/sağ kol dengeli";
+  }
+  const strongerSide = leftAvgSpeed > rightAvgSpeed ? (lang === "en" ? "left" : "sol") : lang === "en" ? "right" : "sağ";
+  return lang === "en"
+    ? `Measured punch speed (from bag work): ${strongerSide} arm averages ~${diffPct}% faster than the other`
+    : `Ölçülen yumruk hızı (torba çalışmasından): ${strongerSide} kol diğerinden ortalama ~%${diffPct} daha hızlı`;
+}
+
 export function buildProfileLine(profile, lang) {
   return [
     profile?.displayName && (lang === "en" ? `Name: ${profile.displayName}` : `İsim: ${profile.displayName}`),
@@ -26,6 +44,7 @@ export function buildProfileLine(profile, lang) {
     profile?.strengths?.length && (lang === "en" ? `Strengths: ${profile.strengths.join(", ")}` : `Güçlü yanlar: ${profile.strengths.join(", ")}`),
     profile?.weaknesses?.length && (lang === "en" ? `Areas to improve: ${profile.weaknesses.join(", ")}` : `Geliştirmesi gerekenler: ${profile.weaknesses.join(", ")}`),
     buildRatingsLine(profile?.ratings, lang),
+    buildPunchBalanceLine(profile?.punchBalance, lang),
   ]
     .filter(Boolean)
     .join(" · ");
