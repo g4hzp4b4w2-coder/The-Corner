@@ -4,22 +4,22 @@
 // movement during a slip or duck has a very different natural range and
 // speed than a punch does.
 //
+// Unlike Pad Work's fixed absolute target positions, these are DELTAS
+// applied to wherever the head actually is the moment a target spawns
+// (see DodgeMode.jsx) — real testing showed fixed absolute zones read as
+// "appearing randomly in empty space," disconnected from the person's
+// actual stance/distance from camera. A delta from the current position
+// is always a consistent, reachable movement regardless of where they're
+// standing.
+//
 // Only lateral slips and a duck are included. A real lean-away/pull-back
 // dodge moves mostly toward the camera (depth), which 2D tracking can't
 // see — the same foreshortening limitation documented for jabs in
-// liveDetection.js, so it's left out rather than faked.
-//
-// At rest (head upright, facing the camera), the nose sits roughly
-// (0, -0.6) relative to the shoulder midpoint (above the shoulder line —
-// image y increases downward) — a guess, not a measurement. Every target
-// below is placed comfortably beyond HEAD_HIT_RADIUS from that rest
-// point, learning from Pad Work's first version: a target too close to
-// the natural resting position can register as a hit with no real dodge
-// at all.
+// liveDetection.js.
 export const DODGE_TARGETS = [
-  { key: "slip-left", rel: { x: -0.5, y: -0.6 } },
-  { key: "slip-right", rel: { x: 0.5, y: -0.6 } },
-  { key: "duck", rel: { x: 0, y: -0.1 } },
+  { key: "slip-left", delta: { x: -0.5, y: 0 } },
+  { key: "slip-right", delta: { x: 0.5, y: 0 } },
+  { key: "duck", delta: { x: 0, y: 0.4 } },
 ];
 
 export function pickDodgeTarget(lastKey) {
