@@ -11,16 +11,23 @@
 // Three canonical pad heights per side, defined as relWrist-space
 // coordinates (offset from that arm's own shoulder, normalized by
 // shoulder width) — a rough stand-in for how a real coach holds mitts at
-// jab height, hook height, and body-shot height. Untested against real
-// use; expect these to need retuning once tried for real, same as every
-// other threshold in this app.
+// jab height, hook height, and body-shot height.
+//
+// These need real separation from the guard/rest position (wrist near
+// the shoulder, roughly rel ≈ (0, 0.1)) relative to HIT_RADIUS below —
+// the first version placed "high" at distance ~0.335 from that rest spot,
+// which is INSIDE HIT_RADIUS (0.35): just resting the guard there could
+// already count as a hit with no punch thrown, confirmed by real testing.
+// Pushed out further here so every target sits comfortably beyond
+// HIT_RADIUS from a natural guard position — still retuning against real
+// use, like every other threshold in this app.
 export const PAD_TARGETS = [
-  { key: "left-high", side: "left", rel: { x: -0.15, y: -0.3 } },
-  { key: "left-mid", side: "left", rel: { x: -0.35, y: 0.05 } },
-  { key: "left-low", side: "left", rel: { x: -0.1, y: 0.4 } },
-  { key: "right-high", side: "right", rel: { x: 0.15, y: -0.3 } },
-  { key: "right-mid", side: "right", rel: { x: 0.35, y: 0.05 } },
-  { key: "right-low", side: "right", rel: { x: 0.1, y: 0.4 } },
+  { key: "left-high", side: "left", rel: { x: -0.25, y: -0.45 } },
+  { key: "left-mid", side: "left", rel: { x: -0.55, y: 0.05 } },
+  { key: "left-low", side: "left", rel: { x: -0.2, y: 0.55 } },
+  { key: "right-high", side: "right", rel: { x: 0.25, y: -0.45 } },
+  { key: "right-mid", side: "right", rel: { x: 0.55, y: 0.05 } },
+  { key: "right-low", side: "right", rel: { x: 0.2, y: 0.55 } },
 ];
 
 // Avoids repeating the same target twice in a row, which would make a
