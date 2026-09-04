@@ -1,32 +1,37 @@
-// Dodge target zones for the "reach with your head" mode — same engine
-// as Pad Work (reactionTarget.js's checkTarget), just tracking relNose
-// instead of relWrist, and with its own radius/speed/timeout since head
-// movement during a slip or duck has a very different natural range and
-// speed than a punch does.
-//
-// Unlike Pad Work's fixed absolute target positions, these are DELTAS
-// applied to wherever the head actually is the moment a target spawns
-// (see DodgeMode.jsx) — real testing showed fixed absolute zones read as
-// "appearing randomly in empty space," disconnected from the person's
-// actual stance/distance from camera. A delta from the current position
-// is always a consistent, reachable movement regardless of where they're
-// standing.
-//
-// Only lateral slips and a duck are included. A real lean-away/pull-back
-// dodge moves mostly toward the camera (depth), which 2D tracking can't
-// see — the same foreshortening limitation documented for jabs in
-// liveDetection.js.
-export const DODGE_TARGETS = [
-  { key: "slip-left", delta: { x: -0.5, y: 0 } },
-  { key: "slip-right", delta: { x: 0.5, y: 0 } },
-  { key: "duck", delta: { x: 0, y: 0.4 } },
+// Fixed, screen-anchored dodge zones — NOT body-relative. Two earlier
+// approaches both failed real testing: a fixed absolute body-relative
+// point felt disconnected ("appearing randomly in empty space" — it
+// didn't account for how close/far or off-center the person actually
+// stood), and a delta from wherever the head currently is compounds
+// over consecutive targets when the head doesn't fully return to center
+// between them (duck, then duck again from an already-lower position,
+// walking the target downward over the whole round). Anchoring to fixed
+// fractions of the screen avoids both: the zones never move and can't
+// accumulate drift.
+export const DODGE_ZONES = [
+  { key: "slip-left", xMax: 0.35 },
+  { key: "slip-right", xMin: 0.65 },
+  { key: "duck", yMin: 0.65 },
 ];
 
-export function pickDodgeTarget(lastKey) {
-  const pool = lastKey ? DODGE_TARGETS.filter((t) => t.key !== lastKey) : DODGE_TARGETS;
+export function pickDodgeZone(lastKey) {
+  const pool = lastKey ? DODGE_ZONES.filter((z) => z.key !== lastKey) : DODGE_ZONES;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export const HEAD_HIT_RADIUS = 0.3;
+// nxFrac/nyFrac: the tracked head position as a 0-1 fraction of the
+// frame (same space video/canvas coordinates already use).
+export function isInZone(zone, nxFrac, nyFrac) {
+  if (zone.xMax != null && nxFrac >= zone.xMax) return false;
+  if (zone.xMin != null && nxFrac <= zone.xMin) return false;
+  if (zone.yMin != null && nyFrac <= zone.yMin) return false;
+  if (zone.yMax != null && nyFrac >= zone.yMax) return false;
+  return true;
+}
+
 export const HEAD_MIN_HIT_SPEED = 0.4;
 export const DODGE_TIMEOUT_MS = 1200;
+// Brief pause after a dodge resolves before the next one appears —
+// without it, the very next target could demand another dodge before
+// there's been any real chance to recover toward a neutral position.
+export const RECOVERY_MS = 500;
