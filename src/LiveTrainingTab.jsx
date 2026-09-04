@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import ShadowBoxingMode from "./ShadowBoxingMode";
 import BagWorkMode from "./BagWorkMode";
 import PadWorkMode from "./PadWorkMode";
+import DodgeMode from "./DodgeMode";
 
 const MODES = [
   {
@@ -25,7 +26,7 @@ const MODES = [
   },
   {
     key: "dodge",
-    enabled: false,
+    enabled: true,
     label: { tr: "Kaçışlar", en: "Dodging" },
     desc: { tr: "Savunma refleksini canlı olarak çalıştır.", en: "Train your defensive reflexes live." },
   },
@@ -53,6 +54,10 @@ export default function LiveTrainingTab({ lang, userId, onSaveLiveSession }) {
 
   if (mode === "pad") {
     return <PadWorkMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
+  }
+
+  if (mode === "dodge") {
+    return <DodgeMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
   }
 
   return (

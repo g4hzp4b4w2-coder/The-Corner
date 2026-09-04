@@ -44,3 +44,18 @@ export function relWrist(landmarks, side, shoulderWidth) {
   if (!visible(wr) || !visible(sh)) return null;
   return { x: (wr.x - sh.x) / shoulderWidth, y: (wr.y - sh.y) / shoulderWidth };
 }
+
+// Nose position relative to the MIDPOINT between both shoulders (not a
+// single side, since the head isn't attached to one arm), normalized by
+// shoulder width — same body-relative-scale idea as relWrist, used for
+// head-tracking drills (dodging) instead of a wrist.
+export function relNose(landmarks, shoulderWidth) {
+  if (!landmarks) return null;
+  const nose = landmarks[NOSE];
+  const l = landmarks[SHOULDER.left];
+  const r = landmarks[SHOULDER.right];
+  if (!visible(nose) || !visible(l) || !visible(r)) return null;
+  const midX = (l.x + r.x) / 2;
+  const midY = (l.y + r.y) / 2;
+  return { x: (nose.x - midX) / shoulderWidth, y: (nose.y - midY) / shoulderWidth };
+}
