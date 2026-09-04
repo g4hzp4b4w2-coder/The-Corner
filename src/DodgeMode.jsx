@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, X, Minus, Plus } from "lucide-react";
 import { createPoseSession } from "./lib/poseAnalysis";
 import { SHOULDER, visible } from "./lib/poseMath";
-import { checkTarget } from "./lib/reactionTarget";
-import { pickDodgeTarget, HEAD_HIT_RADIUS, HEAD_MIN_HIT_SPEED, DODGE_TIMEOUT_MS } from "./lib/dodgeTarget";
+import { pickDodgeZone, isInZone, HEAD_MIN_HIT_SPEED, DODGE_TIMEOUT_MS, RECOVERY_MS } from "./lib/dodgeTarget";
 import { createHeadTracker } from "./lib/headTracker";
 import { playGong, playHitTone } from "./lib/gongSound";
 
@@ -47,8 +46,15 @@ const COPY = {
     tr: "Açıksa bu antrenman haftalık hedeflere ve liderlik tablosuna sayılır.",
     en: "When on, this session counts toward weekly challenges and the leaderboard.",
   },
-  "slip-left": { tr: "SOL", en: "LEFT" },
-  "slip-right": { tr: "SAĞ", en: "RIGHT" },
+  // Labels are intentionally swapped relative to the zone keys' own
+  // xMax/xMin geometry: "slip-left" is defined in raw (unmirrored,
+  // detection-space) coordinates, where a small x is the subject's own
+  // anatomical right side — but the display is mirrored, so that same
+  // zone renders on the RIGHT of the screen the user actually looks at.
+  // The zone keys/geometry stay as-is (detection is correct); only the
+  // human-readable text is flipped here to match what's visually shown.
+  "slip-left": { tr: "SAĞ", en: "RIGHT" },
+  "slip-right": { tr: "SOL", en: "LEFT" },
   duck: { tr: "AŞAĞI", en: "DOWN" },
 };
 
@@ -92,6 +98,7 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
   const lastCountdownRef = useRef(-1);
   const targetRef = useRef(null);
   const lastTargetKeyRef = useRef(null);
+  const nextSpawnAtRef = useRef(0);
   const roundStatsRef = useRef({ hits: 0, misses: 0, reactionTimes: [] });
   const trackerRef = useRef(null);
 
@@ -132,6 +139,7 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
     setLiveStats({ hits: 0, misses: 0, reactionTimes: [] });
     targetRef.current = null;
     lastTargetKeyRef.current = null;
+    nextSpawnAtRef.current = 0;
     trackerRef.current = createHeadTracker();
     setCurrentRound(roundNumber);
     phaseEndRef.current = performance.now() + roundDuration * 1000;
@@ -238,42 +246,49 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
         if (currentPhase === "round") {
           trackerRef.current?.update(landmarks, now);
 
-          if (!targetRef.current) {
-            const t = pickDodgeTarget(lastTargetKeyRef.current);
+          if (!targetRef.current && now >= nextSpawnAtRef.current) {
             const ls = landmarks ? landmarks[SHOULDER.left] : null;
             const rs = landmarks ? landmarks[SHOULDER.right] : null;
             const sw = trackerRef.current?.getShoulderWidth();
             const currentRel = trackerRef.current?.getRel();
-            // Target is a DELTA from wherever the head actually is right
-            // now, not a fixed absolute zone — a fixed zone read as
-            // "appearing randomly in empty space" in real testing,
-            // disconnected from the person's actual stance/distance from
-            // the camera. Requires a confident current head reading
-            // before spawning (currentRel), same as requiring visible
-            // shoulders.
             if (ls && rs && visible(ls) && visible(rs) && sw > 0 && currentRel) {
-              lastTargetKeyRef.current = t.key;
-              const midX = (ls.x + rs.x) / 2;
-              const midY = (ls.y + rs.y) / 2;
-              const targetRel = { x: currentRel.x + t.delta.x, y: currentRel.y + t.delta.y };
+              const zone = pickDodgeZone(lastTargetKeyRef.current);
+              lastTargetKeyRef.current = zone.key;
+              // Screen position is a FIXED fraction of the frame per zone,
+              // not derived from the body at all — this is what makes the
+              // zones immune to drift, unlike the earlier delta-from-head
+              // approach where consecutive targets could compound.
+              let screenXFrac = 0.5;
+              let screenYFrac = 0.5;
+              if (zone.key === "slip-left") screenXFrac = 0.175;
+              else if (zone.key === "slip-right") screenXFrac = 0.825;
+              else if (zone.key === "duck") screenYFrac = 0.825;
               targetRef.current = {
-                key: t.key,
-                rel: targetRel,
+                key: zone.key,
+                zone,
                 spawnT: now,
                 timeoutAt: now + DODGE_TIMEOUT_MS,
-                // Frozen at spawn, not recomputed every frame — same
-                // reasoning as Pad Work: otherwise the target visibly
-                // drifts as the body naturally sways mid-dodge.
-                screenX: (midX + targetRel.x * sw) * width,
-                screenY: (midY + targetRel.y * sw) * height,
-                screenRadius: Math.max(28, HEAD_HIT_RADIUS * sw * width),
+                screenX: screenXFrac * width,
+                screenY: screenYFrac * height,
+                screenRadius: Math.min(width, height) * 0.14,
               };
             }
-          } else {
+          } else if (targetRef.current) {
             const target = targetRef.current;
+            const sw = trackerRef.current?.getShoulderWidth();
             const rel = trackerRef.current?.getRel();
             const speed = trackerRef.current?.getRecentPeakSpeed() || 0;
-            const outcome = checkTarget(target, rel, speed, now, { hitRadius: HEAD_HIT_RADIUS, minHitSpeed: HEAD_MIN_HIT_SPEED });
+            const ls = landmarks ? landmarks[SHOULDER.left] : null;
+            const rs = landmarks ? landmarks[SHOULDER.right] : null;
+            let outcome = null;
+            if (ls && rs && visible(ls) && visible(rs) && sw > 0 && rel) {
+              const midX = (ls.x + rs.x) / 2;
+              const midY = (ls.y + rs.y) / 2;
+              const absX = midX + rel.x * sw;
+              const absY = midY + rel.y * sw;
+              if (speed >= HEAD_MIN_HIT_SPEED && isInZone(target.zone, absX, absY)) outcome = "hit";
+            }
+            if (!outcome && now > target.timeoutAt) outcome = "miss";
             if (outcome === "hit") {
               const reactionMs = now - target.spawnT;
               roundStatsRef.current = {
@@ -284,11 +299,13 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
               setLiveStats({ ...roundStatsRef.current });
               playHitTone(true);
               targetRef.current = null;
+              nextSpawnAtRef.current = now + RECOVERY_MS;
             } else if (outcome === "miss") {
               roundStatsRef.current = { ...roundStatsRef.current, misses: roundStatsRef.current.misses + 1 };
               setLiveStats({ ...roundStatsRef.current });
               playHitTone(false);
               targetRef.current = null;
+              nextSpawnAtRef.current = now + RECOVERY_MS;
             }
           }
 
