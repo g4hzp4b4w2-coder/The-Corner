@@ -243,19 +243,29 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
             const ls = landmarks ? landmarks[SHOULDER.left] : null;
             const rs = landmarks ? landmarks[SHOULDER.right] : null;
             const sw = trackerRef.current?.getShoulderWidth();
-            if (ls && rs && visible(ls) && visible(rs) && sw > 0) {
+            const currentRel = trackerRef.current?.getRel();
+            // Target is a DELTA from wherever the head actually is right
+            // now, not a fixed absolute zone — a fixed zone read as
+            // "appearing randomly in empty space" in real testing,
+            // disconnected from the person's actual stance/distance from
+            // the camera. Requires a confident current head reading
+            // before spawning (currentRel), same as requiring visible
+            // shoulders.
+            if (ls && rs && visible(ls) && visible(rs) && sw > 0 && currentRel) {
               lastTargetKeyRef.current = t.key;
               const midX = (ls.x + rs.x) / 2;
               const midY = (ls.y + rs.y) / 2;
+              const targetRel = { x: currentRel.x + t.delta.x, y: currentRel.y + t.delta.y };
               targetRef.current = {
-                ...t,
+                key: t.key,
+                rel: targetRel,
                 spawnT: now,
                 timeoutAt: now + DODGE_TIMEOUT_MS,
                 // Frozen at spawn, not recomputed every frame — same
                 // reasoning as Pad Work: otherwise the target visibly
                 // drifts as the body naturally sways mid-dodge.
-                screenX: (midX + t.rel.x * sw) * width,
-                screenY: (midY + t.rel.y * sw) * height,
+                screenX: (midX + targetRel.x * sw) * width,
+                screenY: (midY + targetRel.y * sw) * height,
                 screenRadius: Math.max(28, HEAD_HIT_RADIUS * sw * width),
               };
             }
@@ -283,21 +293,37 @@ export default function DodgeMode({ lang, onBack, onSaveLiveSession }) {
           }
 
           if (targetRef.current) {
-            const { screenX: tx, screenY: ty, screenRadius: radius } = targetRef.current;
+            const { screenX: tx, screenY: ty, screenRadius: radius, key } = targetRef.current;
             const remainingFrac = Math.max(0, (targetRef.current.timeoutAt - now) / DODGE_TIMEOUT_MS);
             ctx.save();
             ctx.translate(width, 0);
             ctx.scale(-1, 1);
+            // A triangle pointing the direction to move, instead of a
+            // plain dot — clearer at a glance which way to dodge.
             ctx.beginPath();
-            ctx.arc(tx, ty, radius, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(220,38,38,0.25)";
+            if (key === "slip-left") {
+              ctx.moveTo(tx - radius, ty);
+              ctx.lineTo(tx + radius * 0.6, ty - radius * 0.85);
+              ctx.lineTo(tx + radius * 0.6, ty + radius * 0.85);
+            } else if (key === "slip-right") {
+              ctx.moveTo(tx + radius, ty);
+              ctx.lineTo(tx - radius * 0.6, ty - radius * 0.85);
+              ctx.lineTo(tx - radius * 0.6, ty + radius * 0.85);
+            } else {
+              ctx.moveTo(tx, ty + radius);
+              ctx.lineTo(tx - radius * 0.85, ty - radius * 0.6);
+              ctx.lineTo(tx + radius * 0.85, ty - radius * 0.6);
+            }
+            ctx.closePath();
+            ctx.fillStyle = "rgba(220,38,38,0.3)";
             ctx.fill();
             ctx.lineWidth = 3;
             ctx.strokeStyle = "#dc2626";
             ctx.stroke();
             ctx.beginPath();
-            ctx.arc(tx, ty, radius, -Math.PI / 2, -Math.PI / 2 + remainingFrac * Math.PI * 2);
+            ctx.arc(tx, ty, radius * 1.3, -Math.PI / 2, -Math.PI / 2 + remainingFrac * Math.PI * 2);
             ctx.strokeStyle = "#f5f5f5";
+            ctx.lineWidth = 2;
             ctx.stroke();
             ctx.restore();
 
