@@ -54,18 +54,21 @@ export const TARGET_TIMEOUT_MS = 1500;
 // threshold here.
 export const MIN_HIT_SPEED = 0.5;
 
-function dist(a, b) {
+export function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // Pure decision for one frame: given the live target, the tracked point's
-// current relWrist-space position (or null if not confidently tracked
-// this frame), its recent peak speed, and the current time, decide
-// whether this frame is a hit, a timeout-miss, or neither yet. Kept
-// separate from the render/game loop so it can be tested against
-// synthetic sequences without a browser.
-export function checkTarget(target, rel, recentPeakSpeed, now) {
-  if (rel && recentPeakSpeed >= MIN_HIT_SPEED && dist(rel, target.rel) < HIT_RADIUS) return "hit";
+// current position in the same rel-space the target was defined in (or
+// null if not confidently tracked this frame), its recent peak speed,
+// and the current time, decide whether this frame is a hit, a
+// timeout-miss, or neither yet. Kept separate from the render/game loop
+// so it can be tested against synthetic sequences without a browser.
+// hitRadius/minHitSpeed default to Pad Work's values but are overridable
+// so Dodging (head movement has a different natural range/speed than a
+// punch) can pass its own.
+export function checkTarget(target, rel, recentPeakSpeed, now, { hitRadius = HIT_RADIUS, minHitSpeed = MIN_HIT_SPEED } = {}) {
+  if (rel && recentPeakSpeed >= minHitSpeed && dist(rel, target.rel) < hitRadius) return "hit";
   if (now > target.timeoutAt) return "miss";
   return null;
 }
