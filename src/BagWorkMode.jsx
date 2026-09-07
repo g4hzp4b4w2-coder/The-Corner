@@ -247,7 +247,16 @@ export default function BagWorkMode({ lang, onBack, onSaveLiveSession, userId })
     setRoundsHistory([]);
     sessionSamplesRef.current = [];
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+      // Browsers apply echo cancellation / noise suppression / auto gain
+      // control to mic input by default — all three are built to smooth
+      // out exactly the kind of sharp, non-speech transient a bag impact
+      // is, which is why the impact detector (validated only against
+      // synthetic RMS data, never real processed mic audio) can end up
+      // seeing almost nothing in a real room. Ask for the raw signal.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       streamRef.current = stream;
       const video = videoRef.current;
       video.srcObject = stream;
