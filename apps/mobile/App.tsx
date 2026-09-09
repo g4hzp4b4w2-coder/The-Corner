@@ -92,6 +92,7 @@ export default function App() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
+        pixelFormat="rgb"
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
       />
