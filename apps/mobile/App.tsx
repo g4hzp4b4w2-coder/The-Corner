@@ -98,7 +98,7 @@ export default function App() {
       minPoseDetectionConfidence: 0.5,
       minPosePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
-      delegate: Delegate.CPU,
+      delegate: Delegate.GPU,
       // Kendi ekranda ayna gibi çevireceğiz (lm.y ekseni), kütüphaninkiyle
       // çakışıp yanlış eksende aynalamasın diye kapalı.
       mirrorMode: 'no-mirror',
