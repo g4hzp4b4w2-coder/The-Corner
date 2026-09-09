@@ -99,7 +99,9 @@ export default function App() {
       minPosePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
       delegate: Delegate.CPU,
-      mirrorMode: 'mirror-front-only',
+      // Kendi ekranda ayna gibi çevireceğiz (lm.y ekseni), kütüphaninkiyle
+      // çakışıp yanlış eksende aynalamasın diye kapalı.
+      mirrorMode: 'no-mirror',
     },
   );
 
@@ -141,7 +143,7 @@ export default function App() {
             style={[
               styles.dot,
               {
-                left: lm.y * width - 4,
+                left: (1 - lm.y) * width - 4,
                 top: lm.x * height - 4,
                 opacity: (lm.visibility ?? 1) > 0.5 ? 1 : 0.25,
               },
