@@ -61,7 +61,7 @@ export default function App() {
       });
       Alert.alert(
         'Fotoğraf testi sonucu',
-        `Landmark sayısı: ${result.results?.[0]?.landmarks?.length ?? 0}\nInference: ${result.inferenceTime?.toFixed(1)} ms\nBoyut: ${result.inputImageWidth}x${result.inputImageHeight}`,
+        `Landmark sayısı: ${result.results?.[0]?.landmarks?.[0]?.length ?? 0}\nInference: ${result.inferenceTime?.toFixed(1)} ms\nBoyut: ${result.inputImageWidth}x${result.inputImageHeight}`,
       );
     } catch (e: any) {
       Alert.alert('Fotoğraf testi hatası', String(e?.message ?? e));
@@ -79,8 +79,11 @@ export default function App() {
     setInferenceMs(result.inferenceTime ?? null);
     // NOT result.landmarks -- the README documents that shape but the
     // actual native bridge (see PdConvertHelpers.swift) sends
-    // { results: [{ landmarks, worldLandmarks, segmentationMasks }], ... }.
-    setLandmarks(result.results?.[0]?.landmarks ?? []);
+    // { results: [{ landmarks: [[<33 points>], ...one array per pose],
+    //   worldLandmarks, segmentationMasks }], ... } -- results[0] is the
+    // single detection call, .landmarks[0] is the first detected pose's
+    // 33 points.
+    setLandmarks(result.results?.[0]?.landmarks?.[0] ?? []);
   }, []);
 
   const poseDetection = usePoseDetection(
