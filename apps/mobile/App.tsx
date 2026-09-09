@@ -141,8 +141,8 @@ export default function App() {
             style={[
               styles.dot,
               {
-                left: lm.x * width - 4,
-                top: lm.y * height - 4,
+                left: lm.y * width - 4,
+                top: lm.x * height - 4,
                 opacity: (lm.visibility ?? 1) > 0.5 ? 1 : 0.25,
               },
             ]}
