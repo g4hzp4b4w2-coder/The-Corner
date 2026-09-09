@@ -19,11 +19,14 @@ sebebi: web app üzerinde paralel bir oturum aktif bug-fix yapıyor, kök
 dizini yeniden yapılandırmak (dosyaları `apps/web/`'e taşımak gibi) o
 oturumla çakışma riski taşır.
 
-`packages/core` (paylaşılan saf mantık paketi) Faz 1'de, spike
-onaylandıktan ve web tarafındaki paralel iş bir kesişim noktasında
-durduğunda kurulacak — o zaman platform-bağımsız dosyalar oraya
-**kopyalanacak** (taşınmayacak), web app'in importları ayrı bir adımda,
-kullanıcıyla koordine edilerek güncellenecek.
+`packages/core` (paylaşılan saf mantık paketi) Faz 1'de kuruldu —
+platform-bağımsız dosyalar oraya **kopyalandı** (taşınmadı), web app'in
+kendi `src/lib/` kopyaları hiç değiştirilmedi. `apps/mobile`, bu pakete npm
+workspaces değil `file:../../packages/core` yerel bağımlılığıyla bağlanıyor
+— bilinçli bir tercih: workspaces için kök `package.json`'a (web app'in
+kendi dosyası) dokunmak gerekirdi, paralel bug-fix oturumuyla çakışma riski
+taşırdı. Web app'in bu pakete geçmesi ayrı bir karar, ayrı bir zamanda,
+kullanıcıyla koordine edilerek yapılacak.
 
 ## Fazlar
 
@@ -34,10 +37,16 @@ kullanıcıyla koordine edilerek güncellenecek.
   bug/uyumsuzluk çıktı, ikisi native Swift patch'i gerektirdi (`patches/`
   klasörü, kalıcı bakım yükü olarak kabul edildi). Detaylar: `SPIKE.md`
   "Sonuç" bölümü.
-- **Faz 1 (sırada)**: `packages/core` kur, saf mantık
-  dosyalarını kopyala, birim testleriyle doğrula (davranış web ile birebir
-  aynı kalmalı).
-- **Faz 2**: Kamera + ses yakalama, canvas/overlay çizimi native olarak
+- **Faz 1 (tamamlandı)**: `packages/core` kuruldu, 10 saf mantık dosyası
+  (`liveDetection`, `poseMath`, `oneEuroFilter`, `audioImpact`,
+  `armTracker`, `reactionTracker`, `headTracker`, `reactionTarget`,
+  `dodgeTarget`, `punchStats`) web'den birebir kopyalandı — tek fark, 4
+  dosyadaki iç importlara Node'un ESM çözümleyicisi için gereken `.js`
+  uzantısı eklendi (Vite/Metro zaten gerektirmiyordu). 36 birim/smoke testi
+  (`packages/core`'da `npm test`) geçiyor, `apps/mobile`'ın Metro'su
+  paketi uçtan uca doğrulanmış şekilde çözümlüyor. `apps/mobile`'ın gerçek
+  ekranları henüz bu paketi kullanmıyor — bağlama işi Faz 2/3'te.
+- **Faz 2 (sırada)**: Kamera + ses yakalama, canvas/overlay çizimi native olarak
   yeniden yazılır (VisionCamera + Skia).
 - **Faz 3**: 4 canlı antrenman modu (Gölge Boksu, Kum Torbası, Pad Work,
   Kaçışlar) tek tek native ekranlara taşınır.
