@@ -1,0 +1,21 @@
+{
+  "name": "@the-corner/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "exports": {
+    "./liveDetection": "./src/liveDetection.js",
+    "./poseMath": "./src/poseMath.js",
+    "./oneEuroFilter": "./src/oneEuroFilter.js",
+    "./audioImpact": "./src/audioImpact.js",
+    "./armTracker": "./src/armTracker.js",
+    "./reactionTracker": "./src/reactionTracker.js",
+    "./headTracker": "./src/headTracker.js",
+    "./reactionTarget": "./src/reactionTarget.js",
+    "./dodgeTarget": "./src/dodgeTarget.js",
+    "./punchStats": "./src/punchStats.js"
+  }
+}
