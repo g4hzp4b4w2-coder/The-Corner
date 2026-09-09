@@ -1,0 +1,68 @@
+diff --git a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift
+index 44999b3..b292e6e 100644
+--- a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift
++++ b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift
+@@ -78,10 +78,19 @@ class PoseDetectorHelper: NSObject {
+     self.delegate = convertIntToDelegate(delegate)
+     super.init()
+ 
+-    createPoseLandmarker()
++    try createPoseLandmarker()
+   }
+ 
+-  private func createPoseLandmarker() {
++  // PATCHED (Faz 0 spike diagnostics): this used to swallow PoseLandmarker
++  // construction errors with a bare print(error), so createDetector's JS
++  // promise always resolved even when the underlying MediaPipe landmarker
++  // failed to initialize (e.g. bad delegate/model) -- every later
++  // detectAsync call then silently no-op'd on a nil poseLandmarker with
++  // zero visible feedback. Rethrowing here lets PoseDetectionModule.
++  // createDetector's existing catch block reject the JS promise with the
++  // real error, which the library's own .catch(e => console.error(...))
++  // already surfaces in the Metro logs.
++  private func createPoseLandmarker() throws {
+     let poseLandmarkerOptions = PoseLandmarkerOptions()
+     poseLandmarkerOptions.runningMode = runningMode
+     poseLandmarkerOptions.numPoses = numPoses
+@@ -94,12 +103,7 @@ class PoseDetectorHelper: NSObject {
+     if runningMode == .liveStream {
+       poseLandmarkerOptions.poseLandmarkerLiveStreamDelegate = self
+     }
+-    do {
+-      poseLandmarker = try PoseLandmarker(options: poseLandmarkerOptions)
+-    }
+-    catch {
+-      print(error)
+-    }
++    poseLandmarker = try PoseLandmarker(options: poseLandmarkerOptions)
+   }
+ 
+   // MARK: - Detection Methods for Different Modes
+@@ -129,14 +133,26 @@ class PoseDetectorHelper: NSObject {
+     sampleBuffer: CMSampleBuffer,
+     orientation: UIImage.Orientation,
+     timeStamps: Int) {
++      // PATCHED (Faz 0 spike diagnostics): surface silent per-frame failures
++      // (MPImage conversion, missing poseLandmarker) through the same
++      // onResults/onError delegate path instead of dropping them.
+       guard let image = try? MPImage(sampleBuffer: sampleBuffer, orientation: orientation) else {
++      liveStreamDelegate?.poseDetectorHelper(self, onResults: nil, error: NSError(
++        domain: "com.PoseDetection.error", code: 1002,
++        userInfo: [NSLocalizedDescriptionKey: "MPImage(sampleBuffer:) failed to construct"]))
++      return
++    }
++    guard poseLandmarker != nil else {
++      liveStreamDelegate?.poseDetectorHelper(self, onResults: nil, error: NSError(
++        domain: "com.PoseDetection.error", code: 1003,
++        userInfo: [NSLocalizedDescriptionKey: "poseLandmarker is nil (failed to initialize)"]))
+       return
+     }
+     do {
+       self.livestreamImageSize = CGSize(width: image.width, height: image.height)
+       try poseLandmarker?.detectAsync(image: image, timestampInMilliseconds: timeStamps)
+     } catch {
+-      print(error)
++      liveStreamDelegate?.poseDetectorHelper(self, onResults: nil, error: error)
+     }
+   }
+ 
