@@ -100,8 +100,6 @@ export default function App() {
       minTrackingConfidence: 0.5,
       delegate: Delegate.CPU,
       mirrorMode: 'mirror-front-only',
-      forceCameraOrientation: 'portrait',
-      forceOutputOrientation: 'portrait',
     },
   );
 
