@@ -5,7 +5,7 @@ import { createPunchDetector } from "./lib/liveDetection";
 import { playGong, playHitTone } from "./lib/gongSound";
 import { getPunchSampleSummary, addComboDrillSamples } from "./lib/db";
 import { summarizeSeed } from "./lib/armTracker";
-import { COMBOS, pickCombo, matchesStep, STEP_TIMEOUT_MS, RECOVERY_MS } from "./lib/comboTarget";
+import { pickCombo, matchesStep, STEP_TIMEOUT_MS, RECOVERY_MS } from "./lib/comboTarget";
 
 const ROUND_DURATIONS = [60, 120, 180];
 const PREP_MS = 5000;
@@ -200,16 +200,31 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
     setPhase("prep");
   };
 
-  const startStep = (combo, stepIndex, now) => {
+  const startCombo = (combo, now) => {
     comboRef.current = {
       combo,
-      stepIndex,
-      stepStartT: now,
+      stepIndex: 0,
+      comboStartT: now,
+      // Punches thrown fast enough can have their detector event confirmed
+      // slightly out of order relative to when the combo engine notices —
+      // eventQueue persists across the WHOLE combo attempt (not reset per
+      // step) precisely so an event that arrives before we've advanced to
+      // expect it isn't lost; it just sits there until the matching step
+      // comes looking for it.
+      stepActiveSinceT: now,
       stepTimeoutAt: now + STEP_TIMEOUT_MS,
+      eventQueue: [],
       detectedEvents: [],
     };
     setCurrentCombo(combo);
-    setCurrentStepIndex(stepIndex);
+    setCurrentStepIndex(0);
+  };
+
+  const advanceStep = (state, nextIndex, activeSinceT, now) => {
+    state.stepIndex = nextIndex;
+    state.stepActiveSinceT = activeSinceT;
+    state.stepTimeoutAt = now + STEP_TIMEOUT_MS;
+    setCurrentStepIndex(nextIndex);
   };
 
   const beginRound = (roundNumber) => {
@@ -333,49 +348,68 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
               const combo = pickCombo(lastComboKeyRef.current);
               lastComboKeyRef.current = combo.key;
               speakCombo(combo, lang);
-              startStep(combo, 0, now);
+              startCombo(combo, now);
             }
           } else {
             const state = comboRef.current;
-            const step = state.combo.steps[state.stepIndex];
 
             for (const ev of newEvents) {
               if (ev.type !== "punch") continue;
-              state.detectedEvents.push({ side: ev.side, style: ev.style, offsetMs: Math.round(ev.t - state.stepStartT) });
+              state.eventQueue.push(ev);
+              state.detectedEvents.push({ side: ev.side, style: ev.style, offsetMs: Math.round(ev.t - state.comboStartT) });
             }
 
-            const matched = newEvents.find((ev) => matchesStep(step, ev));
-            if (matched) {
-              sessionAttemptsRef.current.push({
-                comboKey: state.combo.key,
-                stepIndex: state.stepIndex,
-                expectedSide: step.side,
-                expectedStyle: step.style,
-                outcome: "hit",
-                timeToHitMs: Math.round(matched.t - state.stepStartT),
-                detectedEvents: state.detectedEvents,
-              });
-              const nextIndex = state.stepIndex + 1;
-              if (nextIndex < state.combo.steps.length) {
-                startStep(state.combo, nextIndex, now);
-              } else {
-                roundStatsRef.current = { ...roundStatsRef.current, hits: roundStatsRef.current.hits + 1 };
-                setLiveStats({ ...roundStatsRef.current });
-                playHitTone(true);
-                comboRef.current = null;
-                setCurrentCombo(null);
-                setCurrentStepIndex(-1);
-                nextComboAtRef.current = now + RECOVERY_MS;
+            // A combo thrown fast can have a later step's punch already
+            // confirmed by the detector before the engine has finished
+            // advancing past the step before it — searching the whole
+            // queue (not just this frame's fresh events) for the first
+            // still-unconsumed match since this step became active is
+            // what keeps that punch from being silently dropped.
+            let advancedThisFrame = true;
+            while (advancedThisFrame && comboRef.current) {
+              advancedThisFrame = false;
+              const s = comboRef.current;
+              const step = s.combo.steps[s.stepIndex];
+              const matchIdx = s.eventQueue.findIndex((ev) => ev.t >= s.stepActiveSinceT && matchesStep(step, ev));
+              if (matchIdx !== -1) {
+                const matched = s.eventQueue[matchIdx];
+                s.eventQueue.splice(matchIdx, 1);
+                sessionAttemptsRef.current.push({
+                  comboKey: s.combo.key,
+                  stepIndex: s.stepIndex,
+                  expectedSide: step.side,
+                  expectedStyle: step.style,
+                  outcome: "hit",
+                  timeToHitMs: Math.round(matched.t - s.stepActiveSinceT),
+                  detectedEvents: s.detectedEvents,
+                });
+                const nextIndex = s.stepIndex + 1;
+                if (nextIndex < s.combo.steps.length) {
+                  advanceStep(s, nextIndex, matched.t, now);
+                  advancedThisFrame = true; // a queued later-step punch may already be waiting
+                } else {
+                  roundStatsRef.current = { ...roundStatsRef.current, hits: roundStatsRef.current.hits + 1 };
+                  setLiveStats({ ...roundStatsRef.current });
+                  playHitTone(true);
+                  comboRef.current = null;
+                  setCurrentCombo(null);
+                  setCurrentStepIndex(-1);
+                  nextComboAtRef.current = now + RECOVERY_MS;
+                }
               }
-            } else if (now > state.stepTimeoutAt) {
+            }
+
+            if (comboRef.current && now > comboRef.current.stepTimeoutAt) {
+              const s = comboRef.current;
+              const step = s.combo.steps[s.stepIndex];
               sessionAttemptsRef.current.push({
-                comboKey: state.combo.key,
-                stepIndex: state.stepIndex,
+                comboKey: s.combo.key,
+                stepIndex: s.stepIndex,
                 expectedSide: step.side,
                 expectedStyle: step.style,
                 outcome: "miss",
                 timeToHitMs: null,
-                detectedEvents: state.detectedEvents,
+                detectedEvents: s.detectedEvents,
               });
               roundStatsRef.current = { ...roundStatsRef.current, misses: roundStatsRef.current.misses + 1 };
               setLiveStats({ ...roundStatsRef.current });
