@@ -12,7 +12,7 @@
  * build kurup çalıştırman gerekiyor. Adımlar için apps/mobile/SPIKE.md.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Button, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, Button, Alert, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   Camera,
@@ -21,6 +21,7 @@ import {
 } from 'react-native-vision-camera';
 import {
   usePoseDetection,
+  PoseDetectionOnImage,
   RunningMode,
   Delegate,
 } from 'react-native-mediapipe-posedetection';
@@ -37,10 +38,37 @@ export default function App() {
   const [measuredFps, setMeasuredFps] = useState(0);
 
   const resultTimestamps = useRef<number[]>([]);
+  const cameraRef = useRef<Camera>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
   }, [hasPermission, requestPermission]);
+
+  // DEBUG: canlı frame-processor akışını (orientation/pixel format/mirror)
+  // tamamen atlayıp modelin sabit bir fotoğrafta insan bulup bulamadığını
+  // ayrı test etmek için — Faz 0 spike'ında "canlıda 0 landmark" sorununu
+  // ayıklamak amacıyla eklendi.
+  const testWithPhoto = useCallback(async () => {
+    if (!cameraRef.current) return;
+    setTesting(true);
+    try {
+      const photo = await cameraRef.current.takePhoto();
+      const result = await PoseDetectionOnImage(photo.path, MODEL_FILE, {
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        delegate: Delegate.CPU,
+      });
+      Alert.alert(
+        'Fotoğraf testi sonucu',
+        `Landmark sayısı: ${result.results?.[0]?.landmarks?.length ?? 0}\nInference: ${result.inferenceTime?.toFixed(1)} ms\nBoyut: ${result.inputImageWidth}x${result.inputImageHeight}`,
+      );
+    } catch (e: any) {
+      Alert.alert('Fotoğraf testi hatası', String(e?.message ?? e));
+    } finally {
+      setTesting(false);
+    }
+  }, []);
 
   const onResults = useCallback((result: any) => {
     const now = Date.now();
@@ -49,7 +77,10 @@ export default function App() {
     setMeasuredFps(resultTimestamps.current.length / 2);
 
     setInferenceMs(result.inferenceTime ?? null);
-    setLandmarks(result.landmarks?.[0] ?? []);
+    // NOT result.landmarks -- the README documents that shape but the
+    // actual native bridge (see PdConvertHelpers.swift) sends
+    // { results: [{ landmarks, worldLandmarks, segmentationMasks }], ... }.
+    setLandmarks(result.results?.[0]?.landmarks ?? []);
   }, []);
 
   const poseDetection = usePoseDetection(
@@ -91,9 +122,11 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Camera
+        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
+        photo={true}
         pixelFormat="rgb"
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
@@ -122,6 +155,14 @@ export default function App() {
           Inference: {inferenceMs !== null ? `${inferenceMs.toFixed(1)} ms` : '—'}
         </Text>
         <Text style={styles.hudText}>Landmark sayısı: {landmarks.length}</Text>
+      </View>
+
+      <View style={styles.testButton}>
+        <Button
+          title={testing ? 'Test ediliyor...' : 'Fotoğrafla test et'}
+          onPress={testWithPhoto}
+          disabled={testing}
+        />
       </View>
 
       <StatusBar style="light" />
@@ -158,4 +199,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   hudText: { color: '#fff', fontSize: 14, fontFamily: 'monospace' },
+  testButton: {
+    position: 'absolute',
+    bottom: 48,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 12,
+    padding: 8,
+  },
 });
