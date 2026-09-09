@@ -4,6 +4,7 @@ import ShadowBoxingMode from "./ShadowBoxingMode";
 import BagWorkMode from "./BagWorkMode";
 import PadWorkMode from "./PadWorkMode";
 import DodgeMode from "./DodgeMode";
+import ComboDrillMode from "./ComboDrillMode";
 
 const MODES = [
   {
@@ -29,6 +30,12 @@ const MODES = [
     enabled: true,
     label: { tr: "Kaçışlar", en: "Dodging" },
     desc: { tr: "Savunma refleksini canlı olarak çalıştır.", en: "Train your defensive reflexes live." },
+  },
+  {
+    key: "combo",
+    enabled: true,
+    label: { tr: "Kombinasyon", en: "Combo Drill" },
+    desc: { tr: "Sesli çağrılan kombinasyonu doğru sırayla at.", en: "Throw the called-out combo in the right order." },
   },
 ];
 
@@ -58,6 +65,10 @@ export default function LiveTrainingTab({ lang, userId, onSaveLiveSession }) {
 
   if (mode === "dodge") {
     return <DodgeMode lang={lang} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
+  }
+
+  if (mode === "combo") {
+    return <ComboDrillMode lang={lang} userId={userId} onBack={() => setMode(null)} onSaveLiveSession={onSaveLiveSession} />;
   }
 
   return (

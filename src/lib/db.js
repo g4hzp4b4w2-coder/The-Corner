@@ -320,3 +320,26 @@ export async function getPunchSampleSummary(userId) {
     createdAt: new Date(row.created_at).getTime(),
   }));
 }
+
+// Called-combo drill attempts: unlike freeform shadowboxing, here we know
+// which punch was INTENDED before it's thrown (the app called it out), so
+// every attempt is a labeled sample. detectedEvents keeps every detector
+// event seen during the step's window (not just the matching one) — a
+// single intended punch producing two or more detector events is exactly
+// the shape of the suspected hook/uppercut double-count bug, now visible
+// in real recorded data instead of a guessed-at simulation.
+export async function addComboDrillSamples(userId, attempts) {
+  if (!attempts || attempts.length === 0) return;
+  const rows = attempts.map((a) => ({
+    user_id: userId,
+    combo_key: a.comboKey,
+    step_index: a.stepIndex,
+    expected_side: a.expectedSide,
+    expected_style: a.expectedStyle,
+    outcome: a.outcome,
+    time_to_hit_ms: a.timeToHitMs ?? null,
+    detected_events: a.detectedEvents || [],
+  }));
+  const { error } = await supabase.from("combo_drill_samples").insert(rows);
+  if (error) throw error;
+}
