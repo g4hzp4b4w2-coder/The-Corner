@@ -8,11 +8,13 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.thecorner.mobilespike",
       "infoPlist": {
         "NSCameraUsageDescription": "The Corner spike, gerçek zamanlı poz algılama testi için kameraya erişim gerektirir."
       }
     },
     "android": {
+      "package": "com.thecorner.mobilespike",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
