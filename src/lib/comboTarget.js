@@ -84,7 +84,7 @@ export function matchesStep(step, punchEvent) {
 // Time budget per step, starting when that step becomes the active one
 // (first step starts at combo announce time, so it already includes
 // reaction time to hear/read the callout).
-export const STEP_TIMEOUT_MS = 2200;
+export const STEP_TIMEOUT_MS = 3000;
 // Pause after a combo resolves (hit or miss) before the next one is
 // announced — same "let them reset" reasoning as Dodge Mode's RECOVERY_MS.
 export const RECOVERY_MS = 700;

@@ -23,18 +23,53 @@ function stepLabel(step, lang) {
   return `${side} ${style}`;
 }
 
+// Browsers only allow speechSynthesis to actually produce sound after a
+// direct user gesture (a tap), and Chrome/Android in particular has a
+// known bug where calling speak() immediately after cancel() silently
+// drops the utterance. Priming with a near-silent utterance at the exact
+// moment the user taps "Başla" unlocks audio for the rest of the session;
+// the setTimeout gap before every later speak() avoids the cancel/speak
+// race.
+export function primeSpeech() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  try {
+    const utterance = new SpeechSynthesisUtterance(" ");
+    utterance.volume = 0;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Best-effort — if this fails, speakCombo below will too, and the
+    // combo is always shown on screen regardless.
+  }
+}
+
+function pickVoice(lang) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  const wanted = lang === "en" ? "en" : "tr";
+  return voices.find((v) => v.lang && v.lang.toLowerCase().startsWith(wanted)) || null;
+}
+
 function speakCombo(combo, lang) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   try {
     const text = combo.steps.map((s) => stepLabel(s, lang)).join(", ");
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang === "en" ? "en-US" : "tr-TR";
+    const voice = pickVoice(lang);
+    if (voice) utterance.voice = voice;
     utterance.rate = 1.05;
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    setTimeout(() => {
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        // Speech synthesis is a nice-to-have — the combo is always shown
+        // on screen too, so a browser without working TTS just loses the
+        // audio, not the drill itself.
+      }
+    }, 30);
   } catch {
-    // Speech synthesis is a nice-to-have — the combo is always shown on
-    // screen too, so a browser without TTS support just loses the audio.
+    // Same as above — non-fatal, screen text is the reliable channel.
   }
 }
 
@@ -73,7 +108,6 @@ const COPY = {
     tr: "Açıksa bu antrenman haftalık hedeflere ve liderlik tablosuna sayılır.",
     en: "When on, this session counts toward weekly challenges and the leaderboard.",
   },
-  nextUpLabel: { tr: "Sırada", en: "Up next" },
 };
 
 function c(key, lang) {
@@ -179,7 +213,13 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
   };
 
   const beginRound = (roundNumber) => {
-    detectorRef.current = createPunchDetector(seedRef.current);
+    // Deliberately NOT recreating the detector here (unlike other modes) —
+    // classifyStyle's hook/straight split needs a handful of this arm's own
+    // recent punches before it can tell them apart at all (see
+    // MIN_DISPLACEMENT_SAMPLES in liveDetection.js); a fresh detector every
+    // round means every round's first hook call is judged with zero
+    // history and defaults to "straight". Keeping one detector for the
+    // whole session lets that warm-up happen once, not every round.
     roundStatsRef.current = { hits: 0, misses: 0 };
     setLiveStats({ hits: 0, misses: 0 });
     comboRef.current = null;
@@ -262,6 +302,7 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
       canvas.height = height;
 
       poseSessionRef.current = await createPoseSession();
+      detectorRef.current = createPunchDetector(seedRef.current);
       beginPrep();
 
       const ctx = canvas.getContext("2d");
@@ -431,7 +472,10 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
           </div>
 
           <button
-            onClick={startTraining}
+            onClick={() => {
+              primeSpeech();
+              startTraining();
+            }}
             className="w-full bg-red-600 hover:bg-red-500 text-neutral-950 font-medium text-sm rounded-lg py-2.5 transition-colors"
           >
             {c("startLabel", lang)}
@@ -468,14 +512,26 @@ export default function ComboDrillMode({ lang, onBack, onSaveLiveSession, userId
           </div>
         )}
 
+        {/* The step actually being waited on right now is the one thing
+            that must be readable at a glance mid-round — real testing
+            showed the earlier small badge-row cost more time to read than
+            the whole response window was worth. This is the loud, primary
+            channel; the strip below is just sequence context. */}
+        {phase === "round" && currentCombo && currentStepIndex >= 0 && (
+          <div className="absolute inset-x-0 top-3 flex justify-center px-3 pointer-events-none">
+            <div className="bg-red-600 text-neutral-950 font-extrabold text-3xl px-5 py-2.5 rounded-xl text-center shadow-lg leading-tight">
+              {stepLabel(currentCombo.steps[currentStepIndex], lang)}
+            </div>
+          </div>
+        )}
+
         {phase === "round" && currentCombo && (
-          <div className="absolute inset-x-0 bottom-0 bg-neutral-950/80 px-3 py-2.5">
-            <p className="text-neutral-500 text-[10px] mb-1">{c("nextUpLabel", lang)}</p>
+          <div className="absolute inset-x-0 bottom-0 bg-neutral-950/80 px-3 py-2">
             <div className="flex items-center gap-1.5 flex-wrap">
               {currentCombo.steps.map((step, i) => (
                 <span
                   key={i}
-                  className={`text-xs font-medium px-2 py-1 rounded-lg border ${
+                  className={`text-sm font-medium px-2 py-1 rounded-lg border ${
                     i === currentStepIndex
                       ? "bg-red-600 border-red-500 text-neutral-950"
                       : i < currentStepIndex
