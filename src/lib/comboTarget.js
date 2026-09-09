@@ -13,22 +13,27 @@
 // shows up directly in the recorded data instead of a guessed-at synthetic
 // simulation.
 
+// Keys are self-descriptive on purpose (not boxing shorthand like "1"/"2"/
+// "3") — they end up stored as-is in combo_drill_samples.combo_key, and a
+// bare number is meaningless to anyone (including future us) reading that
+// data without also memorizing a numbering convention most casual users
+// have never heard of either.
 export const COMBOS = [
-  { key: "1", steps: [{ side: "left", style: "straight" }] },
-  { key: "2", steps: [{ side: "right", style: "straight" }] },
-  { key: "3", steps: [{ side: "left", style: "hook" }] },
-  { key: "4", steps: [{ side: "right", style: "hook" }] },
-  { key: "5", steps: [{ side: "left", style: "uppercut" }] },
-  { key: "6", steps: [{ side: "right", style: "uppercut" }] },
+  { key: "left-straight", steps: [{ side: "left", style: "straight" }] },
+  { key: "right-straight", steps: [{ side: "right", style: "straight" }] },
+  { key: "left-hook", steps: [{ side: "left", style: "hook" }] },
+  { key: "right-hook", steps: [{ side: "right", style: "hook" }] },
+  { key: "left-uppercut", steps: [{ side: "left", style: "uppercut" }] },
+  { key: "right-uppercut", steps: [{ side: "right", style: "uppercut" }] },
   {
-    key: "1-2",
+    key: "left-straight_right-straight",
     steps: [
       { side: "left", style: "straight" },
       { side: "right", style: "straight" },
     ],
   },
   {
-    key: "1-1-2",
+    key: "left-straight_left-straight_right-straight",
     steps: [
       { side: "left", style: "straight" },
       { side: "left", style: "straight" },
@@ -36,7 +41,7 @@ export const COMBOS = [
     ],
   },
   {
-    key: "1-2-3",
+    key: "left-straight_right-straight_left-hook",
     steps: [
       { side: "left", style: "straight" },
       { side: "right", style: "straight" },
@@ -44,7 +49,7 @@ export const COMBOS = [
     ],
   },
   {
-    key: "2-3-2",
+    key: "right-straight_left-hook_right-straight",
     steps: [
       { side: "right", style: "straight" },
       { side: "left", style: "hook" },
@@ -52,14 +57,14 @@ export const COMBOS = [
     ],
   },
   {
-    key: "3-2",
+    key: "left-hook_right-straight",
     steps: [
       { side: "left", style: "hook" },
       { side: "right", style: "straight" },
     ],
   },
   {
-    key: "5-6",
+    key: "left-uppercut_right-uppercut",
     steps: [
       { side: "left", style: "uppercut" },
       { side: "right", style: "uppercut" },
