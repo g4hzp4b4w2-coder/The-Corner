@@ -37,13 +37,16 @@ kullanıcıyla koordine edilerek yapılacak.
   bug/uyumsuzluk çıktı, ikisi native Swift patch'i gerektirdi (`patches/`
   klasörü, kalıcı bakım yükü olarak kabul edildi). Detaylar: `SPIKE.md`
   "Sonuç" bölümü.
-- **Faz 1 (tamamlandı)**: `packages/core` kuruldu, 10 saf mantık dosyası
+- **Faz 1 (tamamlandı)**: `packages/core` kuruldu, 11 saf mantık dosyası
   (`liveDetection`, `poseMath`, `oneEuroFilter`, `audioImpact`,
   `armTracker`, `reactionTracker`, `headTracker`, `reactionTarget`,
-  `dodgeTarget`, `punchStats`) web'den birebir kopyalandı — tek fark, 4
-  dosyadaki iç importlara Node'un ESM çözümleyicisi için gereken `.js`
-  uzantısı eklendi (Vite/Metro zaten gerektirmiyordu). 36 birim/smoke testi
-  (`packages/core`'da `npm test`) geçiyor, `apps/mobile`'ın Metro'su
+  `dodgeTarget`, `punchStats`, `comboTarget`) web'den birebir kopyalandı —
+  `comboTarget.js`, kopyalama sırasında henüz yokmuş (web'deki paralel
+  oturum sonradan eklemiş, "çağrılan kombinasyon" antrenman modu için),
+  sonradan fark edilip eklendi. Tek fark, 4 dosyadaki iç importlara Node'un
+  ESM çözümleyicisi için gereken `.js` uzantısı eklendi (Vite/Metro zaten
+  gerektirmiyordu). 40 birim/smoke testi (`packages/core`'da `npm test`)
+  geçiyor, `apps/mobile`'ın Metro'su
   paketi uçtan uca doğrulanmış şekilde çözümlüyor. `apps/mobile`'ın gerçek
   ekranları henüz bu paketi kullanmıyor — bağlama işi Faz 2/3'te.
 - **Faz 2 (sırada)**: Kamera + ses yakalama, canvas/overlay çizimi native olarak

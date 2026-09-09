@@ -16,6 +16,7 @@
     "./headTracker": "./src/headTracker.js",
     "./reactionTarget": "./src/reactionTarget.js",
     "./dodgeTarget": "./src/dodgeTarget.js",
-    "./punchStats": "./src/punchStats.js"
+    "./punchStats": "./src/punchStats.js",
+    "./comboTarget": "./src/comboTarget.js"
   }
 }
