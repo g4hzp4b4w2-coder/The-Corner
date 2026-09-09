@@ -57,6 +57,59 @@ dependency'sini kendi majör sürümünde bile takip etmiyor.
 - `react-native-fast-tflite` + ham BlazePose TFLite modeli ile kendi
   entegrasyonumuz — en çok kontrol ama en çok iş.
 
+## Sonuç (gerçek cihazda test edildi — iPhone, iOS)
+
+**Üçü de olumlu, ama (1) hiç kolay olmadı.**
+
+1. **Kurulum**: Çalışıyor, ama "saatler süren native debug" tam olarak
+   gerçekleşti — sırayla bulunup düzeltilen gerçek sorunlar:
+   - `react-native-vision-camera` v5 ile bu kütüphane uyumsuz (v4.7.3'e
+     sabitlendi — README'de bu kısıtlama hiç yazmıyor).
+   - `babel-preset-expo` paketi `package.json`'da eksikti (Expo'nun kendi iç
+     klasöründe gizli kalıyordu, hoist edilmemiş).
+   - `react-native-worklets-core`'un babel eklentisi 5 tane Babel plugin'i
+     kullanıyor ama hiçbirini kendi bağımlılığı olarak beyan etmiyor.
+   - **Native (Swift) tarafta ciddi bir hata yutma sorunu**: dedektör kurulumu
+     gerçekten başarısız olsa bile hata sadece Xcode konsoluna yazdırılıyor,
+     JS'e hiç iletilmiyor — `createDetector`'ın JS promise'i her zaman
+     "başarılı" dönüyordu. `patch-package` ile düzeltildi (bkz.
+     `patches/react-native-mediapipe-posedetection+0.4.0.patch`).
+   - VisionCamera'nın varsayılan kamera formatı (YUV), MediaPipe'ın beklediği
+     format (BGRA) ile uyuşmuyordu — `pixelFormat="rgb"` ile çözüldü.
+   - **README'nin belgelediği sonuç yapısı yanlış**: `result.landmarks`
+     diye dokümante edilmiş ama native kod gerçekte
+     `result.results[0].landmarks[0]` gönderiyor. Bu yüzden uzun süre model
+     çalışıyor sanılıp "0 landmark" hatası kovalandı — aslında hep doğru
+     çalışıyordu, yanlış alan okunuyordu.
+   - Ekrana çizim için x/y eksenini elle takas etmek ve aynalamayı kendi
+     kodumuzda yapmak gerekti (kütüphanenin kendi koordinat/mirror mantığı
+     bizim kurulumumuzla uyuşmadı).
+   - Kütüphane kendi içinde ~15 FPS'lik bir sınırı native Swift'te sabit
+     kodlamış (JS'ten değiştirilemez) — `patch-package` ile kaldırıldı.
+
+   Sonuç: **8 farklı gerçek bug/uyumsuzluk** art arda çıktı, ikisi native
+   Swift patch'i gerektirdi. Bu, "28 yıldızlı tek geliştiricili paket" riskinin
+   gerçek olduğunun kanıtı — kütüphane iş görüyor ama hiç "kur ve çalıştır"
+   değil, her adımda kaynak koduna inmek gerekti.
+
+2. **FPS / gecikme**: Kütüphanenin kendi ~15 FPS sınırı kaldırılınca (GPU
+   delegate ile) **30.5 FPS**, 2 dakika kesintisiz kullanımda çökme, ısınma ya
+   da yavaşlama olmadan. Hızlı yumruk takibi için fazlasıyla yeterli bir hız.
+3. **Landmark kalitesi**: Sabit dururken bilek noktası neredeyse hiç
+   titremiyor — iyi sinyal.
+
+**Önemli çekince**: 30 FPS'i, kütüphanenin "çökmeyi önlemek için" koyduğu
+güvenlik sınırını kaldırarak aldık. 2 dakikalık test temiz geçti ama gerçek
+bir antrenman seansı (10-20+ dakika, telefon ısınmış, arka planda başka şeyler
+açıkken) aynı kararlılığı gösterir mi, henüz bilmiyoruz — Faz 1/2'de daha
+uzun süreli testlerle doğrulanmalı.
+
+**Öneri**: Bu kütüphaneyle devam etmek mantıklı — fonksiyonel olarak çalışıyor
+ve performansı iyi. Ama iki native patch'i (`patches/` klasörü, `postinstall`
+ile otomatik uygulanıyor) kalıcı bir bakım yükü olarak kabul etmemiz gerekiyor;
+kütüphane güncellendiğinde bu patch'lerin tekrar uyup uymadığını kontrol
+etmemiz gerekecek. ML Kit alternatifini şimdilik araştırmaya gerek yok.
+
 ## Adım adım — senin yapman gerekenler
 
 Ben (Claude) bu ortamda gerçek telefon donanımına erişemiyorum; kamera/model

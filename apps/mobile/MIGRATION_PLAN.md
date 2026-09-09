@@ -27,8 +27,14 @@ kullanıcıyla koordine edilerek güncellenecek.
 
 ## Fazlar
 
-- **Faz 0 (şimdi)**: Spike — bu PR/branch. Kod hazır, doğrulama kullanıcıda.
-- **Faz 1**: Spike onaylanırsa → `packages/core` kur, saf mantık
+- **Faz 0 (tamamlandı)**: Spike gerçek iPhone'da doğrulandı — sonuç olumlu.
+  30.5 FPS (kütüphanenin kendi ~15 FPS sınırı kaldırılarak), 2 dakika
+  kesintisiz kullanımda çökme/ısınma yok, landmark titremesi düşük. Kütüphane
+  fonksiyonel ama hiç sorunsuz değildi — kurulum sırasında 8 ayrı gerçek
+  bug/uyumsuzluk çıktı, ikisi native Swift patch'i gerektirdi (`patches/`
+  klasörü, kalıcı bakım yükü olarak kabul edildi). Detaylar: `SPIKE.md`
+  "Sonuç" bölümü.
+- **Faz 1 (sırada)**: `packages/core` kur, saf mantık
   dosyalarını kopyala, birim testleriyle doğrula (davranış web ile birebir
   aynı kalmalı).
 - **Faz 2**: Kamera + ses yakalama, canvas/overlay çizimi native olarak
