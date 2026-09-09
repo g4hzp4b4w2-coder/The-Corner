@@ -1,3 +1,33 @@
+diff --git a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionFrameProcessorPlugin.swift b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionFrameProcessorPlugin.swift
+index 511689d..dc48891 100644
+--- a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionFrameProcessorPlugin.swift
++++ b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionFrameProcessorPlugin.swift
+@@ -16,7 +16,9 @@ internal class PoseDetectionFrameProcessorPlugin: FrameProcessorPlugin {
+ 
+   // Per‑detector throttling to keep CPU/memory under control
+   private var lastProcessedTime: [Int: TimeInterval] = [:]
+-  private let minFrameInterval: TimeInterval = 0.066 // ~15 FPS
++  // PATCHED (Faz 0 spike): remove the library's hardcoded ~15fps throttle
++  // to measure the device's real unthrottled FPS ceiling.
++  private let minFrameInterval: TimeInterval = 0.0
+   private let throttleQueue = DispatchQueue(
+     label: "com.mediapipe.frameprocessor.throttle"
+   )
+diff --git a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionModule.swift b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionModule.swift
+index 6c71489..375ccc1 100644
+--- a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionModule.swift
++++ b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectionModule.swift
+@@ -28,7 +28,9 @@ public class PoseDetectionModule: NSObject {
+     qos: .userInitiated
+   )
+   private var lastEventTime: [Int: TimeInterval] = [:]  // per‑detector
+-  private let minEventInterval: TimeInterval = 0.066    // ~15 FPS
++  // PATCHED (Faz 0 spike): remove the library's hardcoded ~15fps throttle
++  // to measure the device's real unthrottled FPS ceiling.
++  private let minEventInterval: TimeInterval = 0.0
+   private var droppedFrameCount: [Int: Int] = [:]
+ 
+   @objc public static func requiresMainQueueSetup() -> Bool {
 diff --git a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift b/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift
 index 44999b3..b292e6e 100644
 --- a/node_modules/react-native-mediapipe-posedetection/ios/posedetection/PoseDetectorHelper.swift
