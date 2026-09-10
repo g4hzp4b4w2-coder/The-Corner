@@ -49,10 +49,34 @@ kullanıcıyla koordine edilerek yapılacak.
   geçiyor, `apps/mobile`'ın Metro'su
   paketi uçtan uca doğrulanmış şekilde çözümlüyor. `apps/mobile`'ın gerçek
   ekranları henüz bu paketi kullanmıyor — bağlama işi Faz 2/3'te.
-- **Faz 2 (sırada)**: Kamera + ses yakalama, canvas/overlay çizimi native olarak
-  yeniden yazılır (VisionCamera + Skia).
-- **Faz 3**: 4 canlı antrenman modu (Gölge Boksu, Kum Torbası, Pad Work,
-  Kaçışlar) tek tek native ekranlara taşınır.
+- **Faz 2 (tamamlandı)**: Kamera (Faz 0'dan zaten hazırdı), ses yakalama ve
+  overlay çizimi native olarak yeniden yazıldı, üçü de gerçek cihazda
+  doğrulandı:
+  - **Ses**: `expo-audio`'nun `useAudioStream`'i ile gerçek zamanlı PCM mikrofon
+    yakalama (`packages/core`'daki `audioImpact.js`'e mobile-only
+    `rmsOfFloat32` eklendi). iOS'ta `AVAudioSession` `.measurement` modu
+    kullanılıyor, ekstra echo-cancellation/AGC ayarı gerekmedi. Cihazda RMS
+    doğru tepki veriyor, çökme yok. Darbe sayma eşiği (hit-detection
+    threshold) ayarı bilinçli olarak ertelendi — web'de de var olan bir
+    hassasiyet sorunu, taşıma hatası değil.
+  - **Overlay**: `@shopify/react-native-skia@2.11.2` ile GPU tabanlı çizim
+    (`components/PoseOverlay.tsx`) — iskelet çizgileri + eklem noktaları,
+    ayna modu ve rotasyon doğru. Cihazda skeleton render doğrulandı, FPS
+    kaybı yok (30-30.5 FPS aynı kaldı).
+  - **Bağımlılık çakışması**: Skia'nın "opsiyonel" peer'ı olmasına rağmen
+    çalışma zamanında `react-native-reanimated` gerektirdiği görüldü;
+    eklendi (`^4.6.0`) ve `react-native-worklets@0.12.2` ile birlikte,
+    frame processor'ün kullandığı `react-native-worklets-core` ile yan yana
+    (iki bağımsız worklet runtime, ikisi de babel.config.js'de). Bu ekleme
+    `expo-modules-core`'un eski bir worklets aralığıyla çakışıp EAS
+    build'de tekrarlayan "Install dependencies" / lockfile hatalarına yol
+    açtı — `package.json`'da `overrides: { "react-native-worklets":
+    "0.12.2" }` ile kalıcı çözüldü, `npm ci --include=dev` ile doğrulandı.
+- **Faz 3 (sırada)**: 5 canlı antrenman modu (Gölge Boksu, Kum Torbası, Pad
+  Work, Kaçışlar, Combo Drill) tek tek native ekranlara taşınır —
+  `packages/core`'daki mod-özel mantık (`dodgeTarget`, `reactionTarget`,
+  `comboTarget`, `armTracker` vb.) Faz 2'nin kamera/ses/Skia altyapısına
+  bağlanır.
 - **Faz 4**: Navigasyon (React Navigation), auth/Supabase client, coach
   chat/plan ekranları, genel UI/NativeWind.
 - **Faz 5**: EAS production build, mağaza başvuruları (Apple/Google).
