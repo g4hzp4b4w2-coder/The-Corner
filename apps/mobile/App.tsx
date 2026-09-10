@@ -25,8 +25,15 @@ import {
   RunningMode,
   Delegate,
 } from 'react-native-mediapipe-posedetection';
+import { useAudioStream, requestRecordingPermissionsAsync } from 'expo-audio';
+import { createImpactDetector, rmsOfFloat32 } from '@the-corner/core/audioImpact';
 
 const MODEL_FILE = 'pose_landmarker_lite.task';
+// Native mic buffers arrive in ~100ms chunks; sub-slicing into smaller
+// windows before computing RMS keeps a short punch/bag-hit transient from
+// being smeared/diluted across the whole 100ms, closer to how the web
+// version's much shorter Web Audio analyser windows behaved.
+const AUDIO_CHUNK_SAMPLES = 512;
 
 export default function App() {
   const { width, height } = useWindowDimensions();
@@ -40,6 +47,51 @@ export default function App() {
   const resultTimestamps = useRef<number[]>([]);
   const cameraRef = useRef<Camera>(null);
   const [testing, setTesting] = useState(false);
+
+  // DEBUG: kum torbası darbe algılamayı (mikrofon) izole test etmek için —
+  // Faz 2'de expo-audio'nun useAudioStream'inin gerçek cihazda işe
+  // yarayıp yaramadığını görmeden asıl ekranları yazmanın anlamı yok.
+  const impactDetectorRef = useRef(createImpactDetector());
+  const [audioHits, setAudioHits] = useState(0);
+  const [lastRms, setLastRms] = useState<number | null>(null);
+
+  const audio = useAudioStream({
+    sampleRate: 48000,
+    channels: 1,
+    encoding: 'float32',
+    onBuffer: (buffer) => {
+      const samples = new Float32Array(buffer.data);
+      const chunkMs = (AUDIO_CHUNK_SAMPLES / buffer.sampleRate) * 1000;
+      const baseMs = buffer.timestamp * 1000;
+      let hitThisBuffer = false;
+      let lastChunkRms = 0;
+      for (let offset = 0; offset < samples.length; offset += AUDIO_CHUNK_SAMPLES) {
+        const chunk = samples.subarray(offset, Math.min(offset + AUDIO_CHUNK_SAMPLES, samples.length));
+        const rms = rmsOfFloat32(chunk);
+        lastChunkRms = rms;
+        const t = baseMs + (offset / AUDIO_CHUNK_SAMPLES) * chunkMs;
+        if (impactDetectorRef.current.update(rms, t)) hitThisBuffer = true;
+      }
+      setLastRms(lastChunkRms);
+      if (hitThisBuffer) setAudioHits((n) => n + 1);
+    },
+  });
+
+  const toggleAudioTest = useCallback(async () => {
+    if (audio.isStreaming) {
+      audio.stream.stop();
+      return;
+    }
+    const { granted } = await requestRecordingPermissionsAsync();
+    if (!granted) {
+      Alert.alert('İzin gerekli', 'Ses testi için mikrofon izni gerekiyor.');
+      return;
+    }
+    impactDetectorRef.current = createImpactDetector();
+    setAudioHits(0);
+    setLastRms(null);
+    await audio.stream.start();
+  }, [audio]);
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -160,6 +212,20 @@ export default function App() {
         <Text style={styles.hudText}>Landmark sayısı: {landmarks.length}</Text>
       </View>
 
+      <View style={styles.audioHud}>
+        <Text style={styles.hudText}>
+          Mikrofon: {audio.isStreaming ? 'dinliyor' : 'kapalı'}
+        </Text>
+        <Text style={styles.hudText}>
+          Son RMS: {lastRms !== null ? lastRms.toFixed(3) : '—'}
+        </Text>
+        <Text style={styles.hudText}>Darbe sayısı: {audioHits}</Text>
+        <Button
+          title={audio.isStreaming ? 'Ses testini durdur' : 'Ses testini başlat (kum torbasına vur)'}
+          onPress={toggleAudioTest}
+        />
+      </View>
+
       <View style={styles.testButton}>
         <Button
           title={testing ? 'Test ediliyor...' : 'Fotoğrafla test et'}
@@ -202,6 +268,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   hudText: { color: '#fff', fontSize: 14, fontFamily: 'monospace' },
+  audioHud: {
+    position: 'absolute',
+    top: 190,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
   testButton: {
     position: 'absolute',
     bottom: 48,

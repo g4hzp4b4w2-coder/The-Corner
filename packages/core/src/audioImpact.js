@@ -32,6 +32,21 @@ export function rmsOf(byteTimeDomainData) {
   return Math.sqrt(sum / byteTimeDomainData.length);
 }
 
+// Mobile-only addition (not present in the web app's copy of this file):
+// native mic capture (expo-audio's useAudioStream) delivers 'float32' PCM
+// already in the -1..1 range, unlike Web Audio's getByteTimeDomainData
+// (unsigned bytes centered on 128, which is what rmsOf above un-centers).
+// Same RMS math, just skipping that byte-to-float step since it's already
+// done.
+export function rmsOfFloat32(floatSamples) {
+  let sum = 0;
+  for (let i = 0; i < floatSamples.length; i++) {
+    const v = floatSamples[i];
+    sum += v * v;
+  }
+  return Math.sqrt(sum / floatSamples.length);
+}
+
 // How many frames to just observe before ever calling a hit — long enough
 // to see the room's real ambient level (a loud gym reads loud from frame
 // one, with no quiet lead-in to learn from), short enough that missing a

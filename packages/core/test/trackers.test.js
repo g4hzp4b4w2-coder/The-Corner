@@ -9,7 +9,7 @@ import { createArmTracker, summarizeSeed } from "../src/armTracker.js";
 import { createReactionTracker } from "../src/reactionTracker.js";
 import { createHeadTracker } from "../src/headTracker.js";
 import { createPunchDetector } from "../src/liveDetection.js";
-import { createImpactDetector, rmsOf } from "../src/audioImpact.js";
+import { createImpactDetector, rmsOf, rmsOfFloat32 } from "../src/audioImpact.js";
 import { makeLandmarks } from "./helpers.js";
 
 // A short punch-and-retract sequence for the right wrist.
@@ -85,6 +85,20 @@ test("rmsOf: silence is ~0, full-scale square wave is close to 1", () => {
   const loud = new Uint8Array(100);
   for (let i = 0; i < loud.length; i++) loud[i] = i % 2 === 0 ? 0 : 255;
   assert.ok(rmsOf(loud) > 0.9);
+});
+
+test("rmsOfFloat32: silence is ~0, full-scale square wave is close to 1", () => {
+  const silence = new Float32Array(100).fill(0);
+  assert.ok(rmsOfFloat32(silence) < 1e-9);
+  const loud = new Float32Array(100);
+  for (let i = 0; i < loud.length; i++) loud[i] = i % 2 === 0 ? -1 : 1;
+  assert.ok(rmsOfFloat32(loud) > 0.99);
+});
+
+test("rmsOfFloat32 and rmsOf agree on the same waveform in their respective encodings", () => {
+  const floatSamples = new Float32Array([0, 0.5, -0.5, 0.25, -1, 1]);
+  const byteSamples = Uint8Array.from(floatSamples, (v) => Math.round(v * 128 + 128));
+  assert.ok(Math.abs(rmsOfFloat32(floatSamples) - rmsOf(byteSamples)) < 0.01);
 });
 
 test("createImpactDetector: stays quiet during bootstrap, then flags a real spike", () => {

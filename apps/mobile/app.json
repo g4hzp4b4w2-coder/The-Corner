@@ -40,6 +40,12 @@
         {
           "assetsPaths": ["./assets/models/"]
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "The Corner spike, kum torbası darbe testinde mikrofona erişim gerektirir."
+        }
       ]
     ]
   }
