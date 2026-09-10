@@ -127,10 +127,25 @@ kullanıcıyla koordine edilerek yapılacak.
       trackers.test.js`, artık 44 test). Kullanıcı yeniden test edecek —
       hem çift sayım düzelmiş mi hem gerçek hızlı kombinasyonlar hâlâ tam
       sayılıyor mu bakılacak.
-    - Bu iki bug, `packages/core`'un mobile kopyasının web'in kopyasından
+    - **3. tur**: 60 yumrukta 53-54 sayıldı (web'den bile iyi), ama sol/sağ
+      TERS sayılıyordu — sağ yumruk "sol" diye, sol "sağ" diye geçiyordu.
+      Pozisyonlar doğruydu (overlay vücudu doğru takip ediyor), sadece
+      kütüphanenin hangi ham landmark index'ine (15 vs 16, bilek için)
+      "sol"/"sağ" etiketini verdiği ters. Kök sebep tam netleştirilemedi
+      (`mirrorMode` ayarının aslında bizim kullandığımız ham
+      `frameProcessor` yoluna hiç etkisi olmadığı görüldü — sadece
+      kullanmadığımız `MediapipeCamera` bileşeni tarafından okunuyor); onun
+      yerine `lib/landmarkSpace.ts`'e MediaPipe'ın 33 noktalık topolojisindeki
+      TÜM çift (sol/sağ) landmark'ları yeniden etiketleyen genel bir swap
+      tablosu eklendi — pozisyon değerlerine dokunmuyor, sadece hangi
+      index'in hangi tarafa ait olduğunu düzeltiyor, altındaki gerçek sebep
+      ne olursa olsun doğru sonuç veriyor.
+    - İlk iki bug, `packages/core`'un mobile kopyasının web'in kopyasından
       ilk kez fiilen AYRIŞTIĞI an — Faz 1'de bilinçli olarak "kopya, paylaşım
       değil" kararı verilmişti tam bu yüzden: platforma özgü ayarlar
-      (kamera/algılama farkları) gerekebilir, web'i etkilemeden.
+      (kamera/algılama farkları) gerekebilir, web'i etkilemeden. Üçüncüsü
+      (sol/sağ takası) `apps/mobile`'a özgü, kütüphane/kamera boru hattının
+      kendisiyle ilgili — web'in hiç karşılaşmayacağı bir sorun.
     Journal kaydetme (not/yarışma toggle/günlüğe kaydet) ve seed'li detector
     warm-start (`getPunchSampleSummary`/`summarizeSeed`) bilinçli olarak
     atlandı —
