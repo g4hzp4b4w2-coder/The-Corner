@@ -72,11 +72,54 @@ kullanıcıyla koordine edilerek yapılacak.
     build'de tekrarlayan "Install dependencies" / lockfile hatalarına yol
     açtı — `package.json`'da `overrides: { "react-native-worklets":
     "0.12.2" }` ile kalıcı çözüldü, `npm ci --include=dev` ile doğrulandı.
-- **Faz 3 (sırada)**: 5 canlı antrenman modu (Gölge Boksu, Kum Torbası, Pad
-  Work, Kaçışlar, Combo Drill) tek tek native ekranlara taşınır —
-  `packages/core`'daki mod-özel mantık (`dodgeTarget`, `reactionTarget`,
-  `comboTarget`, `armTracker` vb.) Faz 2'nin kamera/ses/Skia altyapısına
-  bağlanır.
+- **Faz 3 (devam ediyor)**: 5 canlı antrenman modu (Gölge Boksu, Kum
+  Torbası, Pad Work, Kaçışlar, Combo Drill) tek tek native ekranlara
+  taşınır — `packages/core`'daki mod-özel mantık (`dodgeTarget`,
+  `reactionTarget`, `comboTarget`, `armTracker` vb.) Faz 2'nin
+  kamera/ses/Skia altyapısına bağlanır.
+  - Web'in 5 *Mode.jsx dosyası okunup karşılaştırıldı: hepsi aynı
+    setup→prep→round→roundEnd→sessionEnd faz makinesini, aynı raund
+    sayacı/süresi UI'ını ve aynı günlük-kaydetme akışını birebir
+    tekrarlıyor, sadece algılayıcı (detector/tracker) ve overlay çizimi
+    moda göre değişiyor. Bu yüzden paylaşılan bir altyapı kuruldu, her mod
+    tekrar yazmak yerine ona bağlanıyor:
+    - `training/useTrainingSession.ts` — faz makinesi + raund sayacı,
+      jenerik (journal kaydetme henüz yok, bkz. aşağı).
+    - `hooks/useCameraPose.ts` — Faz 0/2'nin kamera+poz kurulumu, App.tsx
+      spike'ından çıkarılıp paylaşılabilir hale getirildi.
+    - `lib/landmarkSpace.ts` — kritik bir dönüşüm: kütüphanenin ham
+      landmark x/y'si kamera sensörünün (yatay) yönüne göre, ama
+      `packages/core`'daki tüm matematik (`poseMath.js` vb.) web'in
+      görüntü uzayına (x=yatay, y=dikey, aynalanmamış) göre yazıldı.
+      PoseOverlay'in ekranda doğru gösterdiği aynı rotasyon düzeltmesi
+      (x/y takası), aynalama OLMADAN burada da uygulanıyor ki
+      `packages/core` hiç değişmeden native'de de çalışsın. Overlay için
+      doğrulandı (bkz. Faz 2), ama bu matematiğe (omuz genişliği, yumruk
+      algılama vb.) etkisi her mod cihazda ilk çalıştırıldığında ayrıca
+      doğrulanacak — en riskli varsayım burası.
+    - `lib/sound.ts` + `scripts/generate-sounds.js` — web'in
+      `gongSound.js`'i Web Audio API ile canlı sentezliyor, React
+      Native'de karşılığı yok; aynı ton tasarımı (partials/envelope) bir
+      kere WAV dosyasına gömülüp `expo-audio` ile çalınıyor.
+    - `components/TrainingCamera.tsx` — kamera kutusu + iskelet overlay,
+      moda özel ekstra çizim (hedef reticle vb.) için `children` slotu var.
+  - **Gölge Boksu (`screens/ShadowBoxingScreen.tsx`) tamamlandı** — ilk
+    taşınan mod, yukarıdaki altyapıyı uçtan uca kanıtlıyor. `tsc --noEmit`
+    ve `expo export` temiz; cihazda henüz test edilmedi. Journal kaydetme
+    (not/yarışma toggle/günlüğe kaydet) ve seed'li detector warm-start
+    (`getPunchSampleSummary`/`summarizeSeed`) bilinçli olarak atlandı —
+    ikisi de Supabase mobile client'ı gerektiriyor, Faz 4'e bırakıldı; bu
+    ekran şimdilik sadece lokal bir raund/antrenman özeti gösteriyor. Dil
+    desteği de (web'in tr/en `lang` parametresi) şimdilik yok, sadece
+    Türkçe.
+  - **Sırada**: Kum Torbası, Pad Work, Kaçışlar, Combo Drill — aynı
+    `useTrainingSession`/`useCameraPose`/`TrainingCamera` altyapısına
+    bağlanacak, her biri kendi `packages/core` modülünü (`audioImpact`+
+    `armTracker`, `reactionTarget`+`reactionTracker`, `dodgeTarget`+
+    `headTracker`, `comboTarget`+`liveDetection`) kullanacak. Kum Torbası
+    ayrıca Faz 2'de doğrulanan mikrofon/RMS altyapısını devreye sokacak;
+    Combo Drill ayrıca native TTS (`expo-speech` veya benzeri, henüz
+    araştırılmadı) gerektiriyor.
 - **Faz 4**: Navigasyon (React Navigation), auth/Supabase client, coach
   chat/plan ekranları, genel UI/NativeWind.
 - **Faz 5**: EAS production build, mağaza başvuruları (Apple/Google).
