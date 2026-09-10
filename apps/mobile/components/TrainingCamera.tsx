@@ -15,9 +15,20 @@ interface Props {
   frameProcessor: any;
   cameraViewLayoutChangeHandler?: (e: LayoutChangeEvent) => void;
   landmarks: RawLandmark[];
+  // Real captured-frame aspect ratio (portrait width/height), from
+  // useCameraPose. Sizing the box to this (instead of an arbitrary fixed
+  // height) means the preview shows the exact frame the landmarks were
+  // computed against with no "cover" cropping -- a mismatched box aspect
+  // ratio crops the visible preview while the overlay math still assumes
+  // the full uncropped frame, which reads as the skeleton being shifted
+  // off the body. Falls back to a plausible portrait default (3:4) before
+  // the first pose result arrives.
+  frameAspectRatio?: number | null;
   style?: ViewStyle;
   children?: ReactNode;
 }
+
+const DEFAULT_ASPECT_RATIO = 3 / 4;
 
 export function TrainingCamera({
   device,
@@ -25,6 +36,7 @@ export function TrainingCamera({
   frameProcessor,
   cameraViewLayoutChangeHandler,
   landmarks,
+  frameAspectRatio,
   style,
   children,
 }: Props) {
@@ -36,7 +48,10 @@ export function TrainingCamera({
   };
 
   return (
-    <View style={[styles.box, style]} onLayout={onLayout}>
+    <View
+      style={[styles.box, { aspectRatio: frameAspectRatio ?? DEFAULT_ASPECT_RATIO }, style]}
+      onLayout={onLayout}
+    >
       {device && (
         <Camera
           style={StyleSheet.absoluteFill}

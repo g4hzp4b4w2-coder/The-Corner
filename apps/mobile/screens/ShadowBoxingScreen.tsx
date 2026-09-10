@@ -235,7 +235,7 @@ export function ShadowBoxingScreen({ onBack }: { onBack?: () => void }) {
             frameProcessor={camera.frameProcessor}
             cameraViewLayoutChangeHandler={camera.cameraViewLayoutChangeHandler}
             landmarks={camera.rawLandmarks}
-            style={{ height: 320 }}
+            frameAspectRatio={camera.frameAspectRatio}
           >
             <Pressable style={styles.closeButton} onPress={session.abortSession}>
               <Text style={styles.closeButtonText}>×</Text>

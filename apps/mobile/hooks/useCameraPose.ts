@@ -18,6 +18,17 @@ export function useCameraPose(onFrame?: OnPoseFrame) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   const [rawLandmarks, setRawLandmarks] = useState<RawLandmark[]>([]);
+  // The actual captured frame's aspect ratio (portrait, width/height),
+  // derived from every result's inputImageWidth/inputImageHeight -- these
+  // come back in the SENSOR's (landscape) orientation, same as raw
+  // landmark x/y, so the same swap applies: portrait width = image
+  // height, portrait height = image width. Used to size the on-screen
+  // camera box so it shows the exact frame the landmarks were computed
+  // against, with no cropping -- a box with a different aspect ratio than
+  // the real frame gets "cover" cropped by the native preview, which
+  // silently shifts everything the overlay draws relative to what's
+  // visible without changing the underlying landmark math at all.
+  const [frameAspectRatio, setFrameAspectRatio] = useState<number | null>(null);
   const onFrameRef = useRef(onFrame);
   onFrameRef.current = onFrame;
 
@@ -30,6 +41,12 @@ export function useCameraPose(onFrame?: OnPoseFrame) {
     // native bridge sends { results: [{ landmarks: [[<33 points>], ...] }] }.
     const raw: RawLandmark[] = result.results?.[0]?.landmarks?.[0] ?? [];
     setRawLandmarks(raw);
+    const w = result.inputImageWidth;
+    const h = result.inputImageHeight;
+    if (w > 0 && h > 0) {
+      const portraitAspect = h / w;
+      setFrameAspectRatio((prev) => (prev != null && Math.abs(prev - portraitAspect) < 0.01 ? prev : portraitAspect));
+    }
     if (onFrameRef.current) {
       onFrameRef.current(toDetectionSpace(raw), raw, Date.now());
     }
@@ -59,6 +76,7 @@ export function useCameraPose(onFrame?: OnPoseFrame) {
     requestPermission,
     device,
     rawLandmarks,
+    frameAspectRatio,
     frameProcessor: poseDetection.frameProcessor,
     cameraViewLayoutChangeHandler: poseDetection.cameraViewLayoutChangeHandler,
   };
