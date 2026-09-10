@@ -27,6 +27,7 @@ import {
 } from 'react-native-mediapipe-posedetection';
 import { useAudioStream, requestRecordingPermissionsAsync } from 'expo-audio';
 import { createImpactDetector, rmsOfFloat32 } from '@the-corner/core/audioImpact';
+import { PoseOverlay } from './components/PoseOverlay';
 
 const MODEL_FILE = 'pose_landmarker_lite.task';
 // Native mic buffers arrive in ~100ms chunks; sub-slicing into smaller
@@ -187,21 +188,8 @@ export default function App() {
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
       />
 
-      {/* Landmark overlay — normalize (0-1) koordinatları ekran boyutuna çeviriyor */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {landmarks.map((lm, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                left: (1 - lm.y) * width - 4,
-                top: lm.x * height - 4,
-                opacity: (lm.visibility ?? 1) > 0.5 ? 1 : 0.25,
-              },
-            ]}
-          />
-        ))}
+        <PoseOverlay landmarks={landmarks} width={width} height={height} />
       </View>
 
       <View style={styles.hud}>
@@ -250,13 +238,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   text: { color: '#fff', fontSize: 16, textAlign: 'center' },
-  dot: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00E676',
-  },
   hud: {
     position: 'absolute',
     top: 56,

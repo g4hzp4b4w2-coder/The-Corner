@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@shopify/react-native-skia": "^2.11.2",
     "@the-corner/core": "file:../../packages/core",
     "expo": "~57.0.21",
     "expo-audio": "^57.0.4",
