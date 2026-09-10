@@ -79,6 +79,68 @@ test("createPunchDetector: update(null, t) returns an empty array instead of thr
   assert.deepEqual(detector.update(null, 0), []);
 });
 
+// Mobile-only divergence from web's copy (see MIGRATION_PLAN.md): a real
+// punch's torso rotation shrinks the shared shoulder-width denominator
+// both arms are normalized by, which can inflate the STATIONARY arm's
+// apparent speed enough to also register as a punch. Simulates a real
+// right-hand punch while the shoulders blade inward (shrinking width) and
+// the left wrist stays put in absolute image space -- only the right
+// punch should count.
+function rightPunchWithBladingEcho() {
+  const frames = [];
+  const N = 30;
+  for (let i = 0; i <= N; i++) {
+    const t = i * 16;
+    const extend = i <= N / 2 ? i / (N / 2) : (N - i) / (N / 2); // 0 -> 1 -> 0
+    const halfWidth = (0.2 * (1 - extend * 0.5)) / 2; // shoulders blade inward mid-punch
+    frames.push({
+      t,
+      landmarks: makeLandmarks({
+        leftShoulder: { x: 0.5 - halfWidth, y: 0.5, visibility: 1 },
+        rightShoulder: { x: 0.5 + halfWidth, y: 0.5, visibility: 1 },
+        leftWrist: { x: 0.3, y: 0.7, visibility: 1 }, // not actually punching
+        rightWrist: { x: 0.6, y: 0.7 - extend * 0.6, visibility: 1 },
+      }),
+    });
+  }
+  return frames;
+}
+
+// A genuine fast 1-2: both wrists throw a comparably strong, independent
+// punch in the same short window, shoulders stationary -- this should
+// NOT be suppressed just for being close in time to the other arm's.
+function realOneTwoCombo() {
+  const frames = [];
+  const N = 30;
+  for (let i = 0; i <= N; i++) {
+    const t = i * 16;
+    const extend = i <= N / 2 ? i / (N / 2) : (N - i) / (N / 2); // 0 -> 1 -> 0
+    frames.push({
+      t,
+      landmarks: makeLandmarks({
+        leftWrist: { x: 0.4, y: 0.7 - extend * 0.6, visibility: 1 },
+        rightWrist: { x: 0.6, y: 0.7 - extend * 0.6, visibility: 1 },
+      }),
+    });
+  }
+  return frames;
+}
+
+test("createPunchDetector: a blading-induced echo on the stationary arm is suppressed", () => {
+  const detector = createPunchDetector();
+  const events = rightPunchWithBladingEcho().flatMap(({ landmarks, t }) => detector.update(landmarks, t));
+  const punches = events.filter((e) => e.type === "punch");
+  assert.ok(punches.some((e) => e.side === "right"), "the real right-hand punch should still be counted");
+  assert.ok(!punches.some((e) => e.side === "left"), "the stationary left arm should not also be counted");
+});
+
+test("createPunchDetector: a genuine fast 1-2 (both arms comparably strong) is not suppressed", () => {
+  const detector = createPunchDetector();
+  const events = realOneTwoCombo().flatMap(({ landmarks, t }) => detector.update(landmarks, t));
+  const sides = new Set(events.filter((e) => e.type === "punch").map((e) => e.side));
+  assert.ok(sides.has("left") && sides.has("right"), "both arms of a real simultaneous combo should be counted");
+});
+
 test("rmsOf: silence is ~0, full-scale square wave is close to 1", () => {
   const silence = new Uint8Array(100).fill(128);
   assert.ok(rmsOf(silence) < 1e-9);

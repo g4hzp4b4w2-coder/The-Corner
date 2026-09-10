@@ -107,6 +107,21 @@ const MIN_PEAK_SPACING_MS = 320;
 const RISE_MARGIN_RATIO = 0.3;
 const ABSOLUTE_MIN_RISE_MARGIN = 0.15;
 
+// MOBILE-ONLY DIVERGENCE from web's src/lib/liveDetection.js (these two
+// copies are intentionally independent per Faz 1 -- see MIGRATION_PLAN.md):
+// real-device testing surfaced a failure mode where throwing a punch with
+// one arm also counts a punch on the OTHER, stationary arm. Both arms'
+// wrist-relative-to-shoulder position is normalized by the SAME shared
+// shoulderWidth; a real punch's torso rotation/blading shrinks that
+// shared denominator, which inflates BOTH arms' normalized speed at once
+// even though only one arm actually moved. A genuine fast combo (e.g. a
+// 1-2) has both arms show a comparably strong peak; this rotation echo
+// shows the real arm strong and the other arm much weaker -- so a
+// same-instant pair is only suppressed when one side is clearly the
+// weaker echo, not just because it's close in time.
+const CROSS_ARM_SUPPRESS_MS = 250;
+const CROSS_ARM_PROMINENCE_RATIO = 0.6;
+
 const GUARD_DROP_MARGIN = 0.55;
 const GUARD_DROP_MS = 900;
 const GUARD_DROP_COOLDOWN_MS = 1500;
@@ -154,6 +169,7 @@ function initArmState() {
     valleyRel: null,
     peakRel: null,
     lastPeakT: -Infinity,
+    lastPeakProminence: 0,
     guardDropSinceT: null,
     lastGuardWarnT: -Infinity,
     // Kept per-arm, not shared: a lead hand (jab) and rear hand (cross/
@@ -242,11 +258,32 @@ export function createPunchDetector(seed = {}) {
             if (t - arm.curMaxT > CONFIRM_DELAY_MS) {
               const { floor, prominence } = currentThresholds(arm, side);
               const gotProminence = arm.curMax - arm.curMin;
-              if (arm.curMax > floor && gotProminence > prominence && arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS) {
+              const other = arms[side === "left" ? "right" : "left"];
+              // The other arm's most relevant nearby prominence to compare
+              // against: its OWN candidate rise, still in flight (not yet
+              // confirmed -- CONFIRM_DELAY_MS is measured independently
+              // per arm, so at the moment THIS arm confirms, a
+              // simultaneous echo on the other arm is often still
+              // pending) if there is one close in time, otherwise its most
+              // recently confirmed peak.
+              const otherPending = !other.resolved && arm.curMaxT - other.curMaxT < CROSS_ARM_SUPPRESS_MS;
+              const otherProminence = otherPending
+                ? other.curMax - other.curMin
+                : arm.curMaxT - other.lastPeakT < CROSS_ARM_SUPPRESS_MS
+                  ? other.lastPeakProminence
+                  : 0;
+              const crossArmEcho = gotProminence < otherProminence * CROSS_ARM_PROMINENCE_RATIO;
+              if (
+                arm.curMax > floor &&
+                gotProminence > prominence &&
+                arm.curMaxT - arm.lastPeakT > MIN_PEAK_SPACING_MS &&
+                !crossArmEcho
+              ) {
                 const dir = { x: arm.peakRel.x - arm.valleyRel.x, y: arm.peakRel.y - arm.valleyRel.y };
                 const style = classifyStyle(dir, arm.recentDisplacements);
                 events.push({ type: "punch", side, style, t: arm.curMaxT });
                 arm.lastPeakT = arm.curMaxT;
+                arm.lastPeakProminence = gotProminence;
                 arm.recentPeaks.push(arm.curMax);
                 if (arm.recentPeaks.length > ROLLING_WINDOW) arm.recentPeaks.shift();
                 if (style !== "uppercut") {

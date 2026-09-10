@@ -103,11 +103,37 @@ kullanıcıyla koordine edilerek yapılacak.
       kere WAV dosyasına gömülüp `expo-audio` ile çalınıyor.
     - `components/TrainingCamera.tsx` — kamera kutusu + iskelet overlay,
       moda özel ekstra çizim (hedef reticle vb.) için `children` slotu var.
-  - **Gölge Boksu (`screens/ShadowBoxingScreen.tsx`) tamamlandı** — ilk
-    taşınan mod, yukarıdaki altyapıyı uçtan uca kanıtlıyor. `tsc --noEmit`
-    ve `expo export` temiz; cihazda henüz test edilmedi. Journal kaydetme
-    (not/yarışma toggle/günlüğe kaydet) ve seed'li detector warm-start
-    (`getPunchSampleSummary`/`summarizeSeed`) bilinçli olarak atlandı —
+  - **Gölge Boksu (`screens/ShadowBoxingScreen.tsx`) — cihazda test edildi,
+    2 gerçek bug bulunup düzeltildi:**
+    - İskelet vücuttan hafif kaymış görünüyordu — sebep, kamera kutusunun
+      sabit 320px yükseklikte açılması, telefonun gerçekte çektiği görüntünün
+      en-boy oranına uymuyordu; native preview uymayan kutuya "cover" ile
+      kırpıp sığdırıyor, ama overlay matematiği hâlâ kırpılmamış tam
+      görüntü varsayıyordu. Her poz sonucunun taşıdığı gerçek görüntü
+      boyutundan (`inputImageWidth`/`Height`) kutunun doğru oranı artık
+      dinamik hesaplanıyor (`useCameraPose`'daki `frameAspectRatio`).
+    - 60 gerçek yumrukta 111 sayıldı (~1.85x) — sebep, iki kolun da AYNI
+      paylaşılan omuz-genişliği ile normalize edilmesi: bir yumruk atarken
+      gövde döner/blade olur, bu da ölçülen omuz genişliğini anlık
+      küçültür, bu da HER İKİ kolun normalize hızını birden şişirir —
+      atmayan kol da "yumruk" gibi sayılıyordu. `packages/core/src/
+      liveDetection.js`'e (yalnızca mobile kopyası — web'in `src/lib/
+      liveDetection.js`'i Faz 1'den beri bağımsız, bu değişiklik ona
+      dokunmuyor) çapraz-kol bastırma eklendi: iki kol da yakın zamanda
+      (250ms içinde) tetiklenirse ve biri diğerinden belirgin daha zayıfsa
+      (prominence oranı <0.6), zayıf olan bastırılıyor. Gerçek hızlı 1-2
+      kombinasyonunu (iki kol da benzer güçte) YANLIŞLIKLA bastırmadığını
+      doğrulayan ayrı bir test de eklendi (`packages/core/test/
+      trackers.test.js`, artık 44 test). Kullanıcı yeniden test edecek —
+      hem çift sayım düzelmiş mi hem gerçek hızlı kombinasyonlar hâlâ tam
+      sayılıyor mu bakılacak.
+    - Bu iki bug, `packages/core`'un mobile kopyasının web'in kopyasından
+      ilk kez fiilen AYRIŞTIĞI an — Faz 1'de bilinçli olarak "kopya, paylaşım
+      değil" kararı verilmişti tam bu yüzden: platforma özgü ayarlar
+      (kamera/algılama farkları) gerekebilir, web'i etkilemeden.
+    Journal kaydetme (not/yarışma toggle/günlüğe kaydet) ve seed'li detector
+    warm-start (`getPunchSampleSummary`/`summarizeSeed`) bilinçli olarak
+    atlandı —
     ikisi de Supabase mobile client'ı gerektiriyor, Faz 4'e bırakıldı; bu
     ekran şimdilik sadece lokal bir raund/antrenman özeti gösteriyor. Dil
     desteği de (web'in tr/en `lang` parametresi) şimdilik yok, sadece
